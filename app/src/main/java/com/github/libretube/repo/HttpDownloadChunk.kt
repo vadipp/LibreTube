@@ -41,7 +41,7 @@ class HttpDownloadChunk(private val client: OkHttpClient, private val maxBytes: 
             // A full-file HEAD/metadata size plus the exact requested byte count
             // lets us validate these responses without treating a chunk as the file.
             val chunkTotalBug = response.code == 206 && knownSize != null &&
-                bodyLength > 0 && declaredTotal == bodyLength && declaredEnd == bodyLength - 1 &&
+                bodyLength > 0 && declaredTotal != null && declaredTotal == bodyLength && declaredEnd == bodyLength - 1 &&
                 declaredTotal < knownSize
             val rangeLength = if (chunkTotalBug) end - offset + 1
                 else declaredEnd?.let { it - offset + 1 }

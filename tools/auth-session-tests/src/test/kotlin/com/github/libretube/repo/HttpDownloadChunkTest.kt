@@ -11,7 +11,7 @@ import java.io.IOException
 class HttpDownloadChunkTest {
     @Test fun unknownSizeLearnsTotalAndResumesWithInclusiveBoundedRanges() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().addHeader("Content-Length", "7"))
+            server.enqueue(MockResponse().setHeader("Content-Length", "7"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/7").setBody("ABCD"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 4-6/7").setBody("EFG"))
             val downloader = HttpDownloadChunk(OkHttpClient(), 4)
@@ -38,6 +38,8 @@ class HttpDownloadChunkTest {
             assertTrue(result.complete)
             assertEquals(13L, result.totalSize)
             assertEquals("complete file", sink.readUtf8())
+            assertEquals("HEAD", server.takeRequest().method)
+            assertNull(server.takeRequest().getHeader("Range"))
         }
     }
 
@@ -91,7 +93,7 @@ class HttpDownloadChunkTest {
     }
     @Test fun pipedChunkLengthHeadersCannotTruncateDownload() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().addHeader("Content-Length", "7"))
+            server.enqueue(MockResponse().setHeader("Content-Length", "7"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/4").setBody("ABCD"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 4-2/3").setBody("EFG"))
             val downloader = HttpDownloadChunk(OkHttpClient(), 4)
