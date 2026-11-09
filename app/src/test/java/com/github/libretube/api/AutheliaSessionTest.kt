@@ -129,4 +129,27 @@ class AutheliaSessionTest {
         }
         assertEquals(0, server.requestCount)
     }
+
+    @Test fun `server session renewal and deletion replace persisted cookies`() {
+        enqueueLogin()
+        val session = session()
+        session.login(api.toString(), portal.toString(), "user", "password")
+        session.saveFromResponse(api, listOf(okhttp3.Cookie.parse(api,
+            "session=renewed; Domain=example.test; Path=/; Secure; HttpOnly; Max-Age=3600")!!))
+        assertEquals("renewed", AutheliaSession(saved).loadForRequest(api).single().value)
+        session.saveFromResponse(api, listOf(okhttp3.Cookie.parse(api,
+            "session=deleted; Domain=example.test; Path=/; Secure; HttpOnly; Max-Age=0")!!))
+        assertTrue(AutheliaSession(saved).loadForRequest(api).isEmpty())
+    }
+
+    @Test fun `unconfigured client passes ordinary instance responses through`() {
+        val session = session()
+        server.enqueue(MockResponse().setBody("""{"registrationDisabled":true}"""))
+        builder().cookieJar(session).addNetworkInterceptor(session).build()
+            .newCall(Request.Builder().url(api.resolve("config")!!).build()).execute().use {
+                assertEquals(200, it.code)
+            }
+        assertNull(server.takeRequest().getHeader("Cookie"))
+        assertNull(saved)
+    }
 }
