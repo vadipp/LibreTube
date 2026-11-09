@@ -57,3 +57,29 @@ Device verification: log in, load account playlists/feed and thumbnails, force-s
 and reopen the app, then log out and verify a fresh login is required. Test an
 expired server session for a useful error. Download a video and verify playback
 after disabling networking; downloads in this branch use local video extraction.
+
+
+## Fork builds and updates
+
+Trusted branch builds publish a GitHub prerelease with a directly downloadable
+APK and SHA-256 checksum. Actions artifacts remain ZIP downloads; use the release
+asset to avoid extraction. The APK filename includes the app version, CI build
+number, branch and commit. CI also embeds its build number in the Android version
+name and a monotonically increasing version code. PR builds are test builds and
+are not published as releases.
+
+Configure these repository Actions secrets before publishing:
+
+- `ANDROID_SIGNING_KEY`: base64-encoded private Java/PKCS12 signing keystore.
+- `ANDROID_KEY_ALIAS`: the key alias in that keystore.
+- `ANDROID_KEYSTORE_PASSWORD`: the keystore password.
+- `ANDROID_KEY_PASSWORD`: the private key password.
+
+All published branch builds use this same key. Publishing fails if a secret is
+missing or signature verification fails. Keep a private backup of the keystore;
+replacing it prevents Android from accepting updates to existing installations.
+The package remains `com.github.libretube.debug`. Older builds signed with a
+temporary runner key require a one-time uninstall before switching to this key;
+export any wanted app data first. Later builds can update in place and retain
+configuration. The signing secrets are not used for PRs and are never uploaded
+as artifacts. The signing script removes its temporary keystore on exit.
