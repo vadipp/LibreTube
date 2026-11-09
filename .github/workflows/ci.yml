@@ -74,7 +74,9 @@ jobs:
               const xml = fs.readFileSync(path.join(dir, name), 'utf8');
               console.log('::notice::' + escape(xml.match(/<testsuite[^>]*>/)?.[0] || name));
               for (const failure of xml.matchAll(/<failure[\s\S]*?<\/failure>/g)) {
-                console.log('::error::' + escape(failure[0].slice(0, 8000)));
+                const details = failure[0].split('\n');
+                const causes = details.filter(s => /Caused by:|Not mocked|not mocked|AutheliaSession\.kt:/.test(s));
+                console.log('::error::' + escape([details[0], ...causes, ...details.slice(1, 10)].join('\n').slice(0, 3800)));
               }
             }
           }

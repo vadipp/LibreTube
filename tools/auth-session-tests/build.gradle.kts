@@ -8,10 +8,6 @@ kotlin {
         kotlin.srcDir("../../app/src/main/java")
         kotlin.include("com/github/libretube/api/AutheliaSession.kt")
     }
-    sourceSets.test {
-        kotlin.srcDir("../../app/src/test/java")
-        kotlin.include("com/github/libretube/api/AutheliaSessionTest.kt")
-    }
 }
 
 dependencies {

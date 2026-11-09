@@ -187,8 +187,6 @@ dependencies {
 
     /* Testing */
     testImplementation(libs.junit)
-    testImplementation(libs.mockwebserver)
-    testImplementation(libs.okhttp.tls)
 }
 
 //TODO: exclude from release protobuf

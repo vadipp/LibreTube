@@ -40,10 +40,14 @@ Tests cover TLS cookie scope, persistence, credential encoding, redirect handlin
 first-factor-only rejection, and expiration errors using a local HTTPS server:
 
 ```sh
+./gradlew -p tools/auth-session-tests test
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-To run the HTTP/session tests without the Android SDK or Room/KSP processing:
+The HTTP/session suite uses the production source with OkHttp’s JVM variant,
+without the Android SDK or Room/KSP processing. It lives in the standalone
+project because Android’s OkHttp artifact requires a real Android context for
+its public-suffix assets (ordinary Android JVM stubs cannot provide one):
 
 ```sh
 ./gradlew -p tools/auth-session-tests test

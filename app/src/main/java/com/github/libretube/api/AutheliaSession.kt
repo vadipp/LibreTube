@@ -202,7 +202,7 @@ class AutheliaSession(
                 }
             }
             if (e is IOException) throw e
-            throw IOException("Authelia sign-in could not be completed.")
+            throw IOException("Authelia sign-in could not be completed.", e)
         }
     }
 
