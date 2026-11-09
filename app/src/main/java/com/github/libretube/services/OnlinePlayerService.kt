@@ -222,7 +222,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
         when {
             // SABR
             // skip SABR for livestreams, as the player impl has no support for it
-            !streams.isLive && streams.serverAbrStreamingUrl != null && streams.videoPlaybackUstreamerConfig != null -> {
+            !PlayerHelper.usePipedPlayback && !streams.isLive && streams.serverAbrStreamingUrl != null && streams.videoPlaybackUstreamerConfig != null -> {
                 val sabrMediaSourceFactory = SabrMediaSource.Factory(
                     SabrManifest(videoId, streams)
                 )
@@ -247,7 +247,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
                         )
                     }
                     val progressiveMediaSourceFactory = ProgressiveMediaSource.Factory(
-                        DefaultDataSource.Factory(this), extractorsFactory
+                        PlayerHelper.authenticatedDataSourceFactory(this), extractorsFactory
                     ).setLoadOnlySelectedTracks(true)
                     try {
                         // `enableLazyLoadingWithSingleTrack` is private
@@ -300,7 +300,7 @@ open class OnlinePlayerService : AbstractPlayerService() {
             }
             // HLS as last fallback
             streams.hls != null -> {
-                val hlsMediaSourceFactory = HlsMediaSource.Factory(DefaultDataSource.Factory(this))
+                val hlsMediaSourceFactory = HlsMediaSource.Factory(PlayerHelper.authenticatedDataSourceFactory(this))
                     .setPlaylistParserFactory(YoutubeHlsPlaylistParser.Factory())
 
                 val mediaItem = createMediaItem(

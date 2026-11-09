@@ -44,7 +44,8 @@ interface MediaServiceRepository {
 
     companion object {
         val instance: MediaServiceRepository
-            get() =  NewPipeMediaServiceRepository()
+            get() = if (PlayerHelper.usePipedPlayback) PipedMediaServiceRepository()
+                else NewPipeMediaServiceRepository()
     }
 }
 

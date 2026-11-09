@@ -9,6 +9,8 @@ object ProxyHelper {
      * Convert a proxied Piped url to a YouTube url that's not proxied
      */
     fun unwrapUrl(url: String): String {
+        // Keep the proxy host, signature and original upstream-host parameter intact.
+        if (PlayerHelper.usePipedPlayback) return url
         val parsedUrl = url.toHttpUrlOrNull() ?: return url
 
         val host = parsedUrl.queryParameter("host")

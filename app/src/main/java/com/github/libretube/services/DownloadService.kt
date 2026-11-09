@@ -273,6 +273,7 @@ class DownloadService : LifecycleService() {
             if (selectedStream.url?.startsWith("http") == true) {
                 downloadFile(item, RawByteStreamDownloadProvider(selectedStream.url!!.toHttpUrl()))
             } else {
+                check(!PlayerHelper.usePipedPlayback) { "Piped did not return downloadable HTTP media. Direct extraction is disabled in Piped mode." }
                 val sabrDownloader = SabrDownloadProvider(item, streams, selectedStream)
                 downloadFile(item, sabrDownloader)
             }

@@ -578,4 +578,7 @@
     <string name="authelia_portal">Authelia portal URL (optional)</string>
     <string name="authelia_same_credentials">For protected Piped instances. Saves the username and password above securely for automatic sign-in to both services. One-factor authentication only.</string>
     <string name="authelia_register_unavailable">Register the Piped account separately before using Authelia sign-in.</string>
+    <string name="piped_playback">Use Piped for browsing, playback and downloads</string>
+    <string name="piped_playback_summary">Uses the Piped instance selected in Account settings. Sign in there first. No automatic fallback to direct YouTube connections.</string>
+    <string name="piped_playback_login_required">Select Piped and sign in under Account settings before enabling Piped playback.</string>
 </resources>

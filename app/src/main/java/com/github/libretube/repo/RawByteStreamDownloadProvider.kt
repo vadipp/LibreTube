@@ -2,6 +2,8 @@ package com.github.libretube.repo
 
 import android.util.Log
 import com.github.libretube.api.AutheliaAuth
+import com.github.libretube.api.PipedMediaPolicy
+import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.db.obj.DownloadItem
 import com.github.libretube.extensions.TAG
 import com.github.libretube.helpers.DownloadHelper
@@ -26,7 +28,9 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
         OkHttpClient.Builder()
             .cookieJar(AutheliaAuth.session)
             .addInterceptor(AutheliaAuth.session.retryInterceptor)
+            .addInterceptor(PipedMediaPolicy { PlayerHelper.usePipedPlayback })
             .addNetworkInterceptor(AutheliaAuth.session)
+            .addNetworkInterceptor(PipedMediaPolicy { PlayerHelper.usePipedPlayback })
             .connectTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))
             .readTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))
             .retryOnConnectionFailure(true)

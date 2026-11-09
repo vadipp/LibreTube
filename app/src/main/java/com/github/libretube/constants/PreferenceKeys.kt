@@ -8,6 +8,7 @@ object PreferenceKeys {
     // Authentications
     const val TOKEN = "token"
     const val USERNAME = "username"
+    const val PIPED_PLAYBACK = "use_piped_playback"
 
     // General
     const val LANGUAGE = "language"

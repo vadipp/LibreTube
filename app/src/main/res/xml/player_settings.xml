@@ -2,6 +2,14 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="@string/instance">
+        <SwitchPreferenceCompat
+            app:key="use_piped_playback"
+            app:defaultValue="false"
+            app:title="@string/piped_playback"
+            app:summary="@string/piped_playback_summary" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/gestures">
 
         <SwitchPreferenceCompat

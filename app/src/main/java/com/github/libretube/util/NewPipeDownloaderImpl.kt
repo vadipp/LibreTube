@@ -1,5 +1,6 @@
 package com.github.libretube.util
 
+import com.github.libretube.helpers.PlayerHelper
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -14,6 +15,9 @@ class NewPipeDownloaderImpl : Downloader() {
 
     @Throws(IOException::class, ReCaptchaException::class)
     override fun execute(request: Request): Response {
+        if (PlayerHelper.usePipedPlayback) {
+            throw IOException("Direct YouTube extraction is disabled in Piped mode.")
+        }
         val httpMethod = request.httpMethod()
         val url = request.url()
         val headers = request.headers()

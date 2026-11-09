@@ -3,6 +3,7 @@ package com.github.libretube.repo
 import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.enums.SyncServerType
 import com.github.libretube.helpers.PreferenceHelper
+import com.github.libretube.helpers.PlayerHelper
 
 object UserDataRepositoryHelper {
     private val loggedIn get() = PreferenceHelper.getToken().isNotBlank()
@@ -23,7 +24,7 @@ object UserDataRepositoryHelper {
 
     @Deprecated("DO NOT use this directly, use the wrappers from SubscriptionHelper instead!")
     val feedRepository: FeedRepository
-        get() = when (syncServerType to loggedIn) {
+        get() = if (PlayerHelper.usePipedPlayback) PipedAccountFeedRepository() else when (syncServerType to loggedIn) {
             SyncServerType.PIPED to true -> PipedAccountFeedRepository()
             else -> LocalFeedRepository()
         }
