@@ -38,15 +38,17 @@ jobs:
           cache: "gradle"
 
       - name: Test instance authentication independently of Android and KSP
+        shell: bash
         run: |
           ./gradlew -p tools/auth-session-tests test --no-parallel --max-workers=1 --no-configuration-cache --stacktrace 2>&1 | tee auth-tests.log
 
       - name: Compile
+        shell: bash
         run: |
           ./gradlew testDebugUnitTest assembleDebug --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
 
       - name: Publish compiler diagnostics
-        if: failure()
+        if: always()
         run: |
           node <<'JS'
           const fs = require('fs');
@@ -54,6 +56,28 @@ jobs:
           const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
           const errors = lines.filter(s => /(^e: |^error: |^Caused by: |^Execution failed|FAILED| > .*FAILED|^\s+at (com\.google\.devtools|ksp\.|org\.jetbrains))/.test(s));
           for (const line of errors.slice(0, 40)) console.log('::error::' + escape(line));
+          if (lines.some(s => /BUILD FAILED|FAILURE: Build failed/.test(s))) {
+            console.log('::error::' + escape(lines.slice(-90).join('\n')));
+          }
+          JS
+
+      - name: Report authentication test results
+        if: always()
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          const path = require('path');
+          const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+          for (const dir of ['tools/auth-session-tests/build/test-results/test', 'app/build/test-results/testDebugUnitTest']) {
+            if (!fs.existsSync(dir)) continue;
+            for (const name of fs.readdirSync(dir).filter(n => n.includes('AutheliaSessionTest') && n.endsWith('.xml'))) {
+              const xml = fs.readFileSync(path.join(dir, name), 'utf8');
+              console.log('::notice::' + escape(xml.match(/<testsuite[^>]*>/)?.[0] || name));
+              for (const failure of xml.matchAll(/<failure[\s\S]*?<\/failure>/g)) {
+                console.log('::error::' + escape(failure[0].slice(0, 8000)));
+              }
+            }
+          }
           JS
 
       - name: Upload test reports
