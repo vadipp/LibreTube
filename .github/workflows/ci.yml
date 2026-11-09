@@ -75,7 +75,7 @@ jobs:
           const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
           for (const dir of ['tools/auth-session-tests/build/test-results/test', 'app/build/test-results/testDebugUnitTest']) {
             if (!fs.existsSync(dir)) continue;
-            for (const name of fs.readdirSync(dir).filter(n => n.includes('AutheliaSessionTest') && n.endsWith('.xml'))) {
+            for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.xml'))) {
               const xml = fs.readFileSync(path.join(dir, name), 'utf8');
               console.log('::notice::' + escape(xml.match(/<testsuite[^>]*>/)?.[0] || name));
               for (const failure of xml.matchAll(/<failure[\s\S]*?<\/failure>/g)) {

@@ -242,4 +242,16 @@ class AutheliaSessionTest {
             executor.shutdownNow()
         }
     }
+
+    @Test fun `proxy media denial is not mistaken for an expired Authelia session`() {
+        enqueueLogin()
+        val session = session()
+        session.login(api.toString(), portal.toString(), "user", "password")
+        server.enqueue(MockResponse().setResponseCode(403).setBody("Media unavailable"))
+        val client = builder().cookieJar(session).addInterceptor(session.retryInterceptor)
+            .addNetworkInterceptor(session).build()
+        val media = api.newBuilder().host("proxy.example.test").encodedPath("/videoplayback").build()
+        client.newCall(Request.Builder().url(media).build()).execute().use { assertEquals(403, it.code) }
+        assertEquals(3, server.requestCount)
+    }
 }

@@ -126,7 +126,8 @@ class AutheliaSession(
         if (!trusted(chain.request().url, snapshot)) return response
         val destination = response.header("Location")?.let { chain.request().url.resolve(it) }
         val portal = snapshot.portal.toHttpUrl()
-        if (response.code == 401 || response.code == 403 ||
+        // Piped account failures use 401; proxy 403s are media errors, not gateway expiry.
+        if ((response.code == 401 && chain.request().url.origin() == snapshot.api.toHttpUrl().origin()) ||
             (response.isRedirect && destination != null && destination.origin() == portal.origin() &&
                 destination.encodedPath.startsWith(portal.encodedPath))) {
             response.close()

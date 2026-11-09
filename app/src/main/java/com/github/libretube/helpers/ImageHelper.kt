@@ -21,6 +21,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.toBitmap
 import com.github.libretube.api.AutheliaAuth
+import com.github.libretube.api.PipedMediaPolicy
 import com.github.libretube.BuildConfig
 import com.github.libretube.extensions.toAndroidUri
 import com.github.libretube.util.DataSaverMode
@@ -43,7 +44,9 @@ object ImageHelper {
         val httpClient = OkHttpClient().newBuilder()
             .cookieJar(AutheliaAuth.session)
             .addInterceptor(AutheliaAuth.session.retryInterceptor)
+            .addInterceptor(PipedMediaPolicy { PlayerHelper.usePipedPlayback })
             .addNetworkInterceptor(AutheliaAuth.session)
+            .addNetworkInterceptor(PipedMediaPolicy { PlayerHelper.usePipedPlayback })
 
         if (BuildConfig.DEBUG) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {

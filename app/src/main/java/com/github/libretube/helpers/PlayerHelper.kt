@@ -27,6 +27,9 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.github.libretube.api.RetrofitInstance
+import com.github.libretube.api.PipedMediaPolicy
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -64,6 +67,16 @@ import kotlin.math.roundToInt
 import kotlin.time.Clock
 
 object PlayerHelper {
+    val usePipedPlayback: Boolean
+        get() = PreferenceHelper.getBoolean(PreferenceKeys.PIPED_PLAYBACK, false)
+
+    @OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun authenticatedDataSourceFactory(context: Context): DefaultDataSource.Factory {
+        val client = RetrofitInstance.buildClient().newBuilder()
+            .addInterceptor(PipedMediaPolicy { usePipedPlayback })
+            .addNetworkInterceptor(PipedMediaPolicy { usePipedPlayback }).build()
+        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(client))
+    }
     private const val ACTION_MEDIA_CONTROL = "media_control"
     const val CONTROL_TYPE = "control_type"
     const val SPONSOR_HIGHLIGHT_CATEGORY = "poi_highlight"
@@ -452,7 +465,7 @@ object PlayerHelper {
      */
     @OptIn(androidx.media3.common.util.UnstableApi::class)
     fun createPlayer(context: Context, trackSelector: DefaultTrackSelector): ExoPlayer {
-        val dataSourceFactory = DefaultDataSource.Factory(context)
+        val dataSourceFactory = authenticatedDataSourceFactory(context)
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)

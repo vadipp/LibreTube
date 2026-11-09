@@ -32,9 +32,16 @@ instances removes the local credentials and Authelia session; it does not revoke
 devices or delete existing offline downloads. Debug logging excludes login bodies
 and response bodies.
 
-This branch follows the current default branch: Piped is an account/feed sync
-provider, while video extraction is local. It does not restore the older Piped
-playback mode from LibreTube 32.1 or add support for older Android versions.
+The authentication branch follows the current default branch. The separate
+playback-restoration branch adds **Use Piped for browsing, playback and downloads**
+under Player settings. Select Piped and sign in in Account settings before
+enabling it. It uses the same instance API for browsing and stream extraction,
+keeps the returned media proxy URLs and their signatures intact, and sends
+Authelia cookies through the player, HLS/subtitles, images and downloads.
+Piped mode does not silently switch to local extraction: direct YouTube media
+URLs or redirects are rejected. Restart any currently playing video or active
+download after changing the mode. Turning the option off retains upstream local
+playback. Neither branch adds support for older Android versions.
 
 Tests cover TLS cookie scope, persistence, credential encoding, redirect handling,
 first-factor-only rejection, and expiration errors using a local HTTPS server:
@@ -55,9 +62,10 @@ its public-suffix assets (ordinary Android JVM stubs cannot provide one):
 
 Device verification: log in, load account playlists/feed and thumbnails, force-stop
 and reopen the app, then log out and verify a fresh login is required. Test an
-expired server session for a useful error. Download a video and verify playback
-after disabling networking; downloads in this branch use local video extraction.
-
+expired server session for automatic login. On the playback-restoration branch,
+enable Piped mode, play and seek a video, and inspect server access to confirm
+media requests reach the instance proxy. Download it and verify playback after
+disabling networking. The authentication-only branch uses local extraction.
 
 ## Fork builds and updates
 

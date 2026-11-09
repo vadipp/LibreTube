@@ -7,6 +7,7 @@ kotlin {
     sourceSets.main {
         kotlin.srcDir("../../app/src/main/java")
         kotlin.include("com/github/libretube/api/AutheliaSession.kt")
+        kotlin.include("com/github/libretube/api/PipedMediaPolicy.kt")
     }
 }
 

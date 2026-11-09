@@ -11,12 +11,24 @@ import androidx.preference.SwitchPreferenceCompat
 import com.github.libretube.R
 import com.github.libretube.constants.PreferenceKeys
 import com.github.libretube.helpers.LocaleHelper
+import com.github.libretube.helpers.PreferenceHelper
+import com.github.libretube.enums.SyncServerType
+import com.github.libretube.repo.UserDataRepositoryHelper
 import com.github.libretube.ui.base.BasePreferenceFragment
 
 class PlayerSettings : BasePreferenceFragment() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.player_settings, rootKey)
+
+        findPreference<SwitchPreferenceCompat>(PreferenceKeys.PIPED_PLAYBACK)
+            ?.setOnPreferenceChangeListener { _, value ->
+                if (value == true && (UserDataRepositoryHelper.syncServerType != SyncServerType.PIPED ||
+                    PreferenceHelper.getToken().isBlank())) {
+                    Toast.makeText(context, R.string.piped_playback_login_required, Toast.LENGTH_LONG).show()
+                    false
+                } else true
+            }
 
         val defaultSubtitle = findPreference<ListPreference>(PreferenceKeys.DEFAULT_SUBTITLE)
         defaultSubtitle?.let { setupSubtitlePref(it) }
