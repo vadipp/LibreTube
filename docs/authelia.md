@@ -91,3 +91,17 @@ temporary runner key require a one-time uninstall before switching to this key;
 export any wanted app data first. Later builds can update in place and retain
 configuration. The signing secrets are not used for PRs and are never uploaded
 as artifacts. The signing script removes its temporary keystore on exit.
+
+## Android 7.1 backport branch
+
+The API 25 branch restores guards around Oreo-only picture-in-picture, HDR and
+cache-quota APIs. Android 7 uses Coil's default disk-cache sizing and has PiP
+disabled. Core-library desugaring remains enabled for time/NIO APIs used by
+playback and downloads. Only API 25 resources additionally trust the bundled,
+unmodified ISRG Root X1 certificate from Let's Encrypt; API 26+ keeps its existing
+trust configuration. TLS chain and hostname verification remain enabled.
+
+CI runs strict NewApi/InlinedApi lint, tests, assembly and signing, then installs
+and opens the APK twice on a GitHub-hosted API 25 x86 emulator before publishing.
+That startup check does not certify BYD media decoding, authentication, background
+playback or offline downloads. Verify those on the target device.
