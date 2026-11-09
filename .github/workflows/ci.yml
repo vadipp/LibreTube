@@ -50,7 +50,7 @@ jobs:
       - name: Compile
         shell: bash
         run: |
-          ./gradlew testDebugUnitTest assembleDebug -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
+          ./gradlew testDebugUnitTest lintDebug assembleDebug -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
 
       - name: Publish compiler diagnostics
         if: always()
@@ -94,6 +94,7 @@ jobs:
           name: test-reports
           path: |
             app/build/reports/tests/
+            app/build/reports/lint-results-debug.*
             app/build/test-results/
             tools/auth-session-tests/build/reports/tests/
             tools/auth-session-tests/build/test-results/
