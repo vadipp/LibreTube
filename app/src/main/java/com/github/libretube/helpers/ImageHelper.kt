@@ -103,7 +103,7 @@ object ImageHelper {
             if (url.startsWith(HTTP_SCHEME) && !isCached(url)) return
         }
 
-        target.load(url) {
+        target.load(url, imageLoader) {
             listener(
                 onSuccess = { _, _ ->
                     // set the background to white for transparent images
