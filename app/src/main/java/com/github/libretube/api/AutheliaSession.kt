@@ -39,6 +39,7 @@ class AutheliaSession(
 
     @Volatile private var state = initial
     @Volatile private var generation = 0L
+    @Volatile private var refreshedPipedToken: String? = null
     private val loginLock = Any()
     private var automaticLoginFailed = false
 
@@ -50,7 +51,7 @@ class AutheliaSession(
     val retryInterceptor = Interceptor { chain ->
         val observedGeneration = generation
         try {
-            chain.proceed(chain.request())
+            chain.proceed(withCurrentToken(chain.request()))
         } catch (e: AuthenticationRequired) {
             synchronized(loginLock) {
                 val current = state ?: throw e
@@ -66,8 +67,16 @@ class AutheliaSession(
                     }
                 }
             }
-            chain.proceed(chain.request())
+            chain.proceed(withCurrentToken(chain.request()))
         }
+    }
+
+    private fun withCurrentToken(request: Request): Request {
+        val token = refreshedPipedToken ?: return request
+        val snapshot = state ?: return request
+        if (request.url.origin() != snapshot.api.toHttpUrl().origin() ||
+            request.url.queryParameter("authToken") == null) return request
+        return request.newBuilder().url(request.url.newBuilder().setQueryParameter("authToken", token).build()).build()
     }
 
     fun portalFor(api: String): String = state?.takeIf { it.api == api.toHttpUrl().toString() }
@@ -76,6 +85,7 @@ class AutheliaSession(
     @Synchronized
     fun clear() {
         generation++
+        refreshedPipedToken = null
         state = null
         persist(null)
     }
@@ -213,6 +223,7 @@ class AutheliaSession(
                 synchronized(this) {
                     if (generation != expectedGeneration) throw IOException("Instance sign-in was cancelled.")
                     updatePipedToken(token)
+                    refreshedPipedToken = token
                 }
             }
     }

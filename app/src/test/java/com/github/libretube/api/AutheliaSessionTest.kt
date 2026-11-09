@@ -10,6 +10,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
 import org.junit.After
@@ -18,6 +20,10 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.net.InetAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class AutheliaSessionTest {
     private val server = MockWebServer()
@@ -167,13 +173,14 @@ class AutheliaSessionTest {
         val client = builder().cookieJar(session).addInterceptor(session.retryInterceptor)
             .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Authorization", token).build()) }
             .addNetworkInterceptor(session).build()
-        client.newCall(Request.Builder().url(api.resolve("subscriptions")!!).build()).execute().use {
+        client.newCall(Request.Builder().url(api.resolve("feed?authToken=old-token")!!).build()).execute().use {
             assertEquals(200, it.code)
         }
         val requests = (1..7).map { server.takeRequest() }
         assertEquals(2, requests.count { it.path == "/authelia/api/firstfactor" })
         assertEquals("/login", requests[5].path)
         assertEquals("new-token", requests.last().getHeader("Authorization"))
+        assertEquals("/feed?authToken=new-token", requests.last().path)
         assertNull(requests[3].getHeader("Authorization"))
     }
 
@@ -193,5 +200,46 @@ class AutheliaSessionTest {
             assertTrue(error.message!!.contains("Sign in again"))
         }
         assertEquals(5, server.requestCount)
+    }
+
+    @Test fun `simultaneous expired requests share one login`() {
+        var token = "old-token"
+        enqueueLogin()
+        val session = AutheliaSession(clientBuilder = ::builder, updatePipedToken = { token = it })
+        session.login(api.toString(), portal.toString(), "user", "password")
+        val oldRequests = CountDownLatch(2)
+        val logins = AtomicInteger()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/authelia/api/firstfactor" -> {
+                    logins.incrementAndGet()
+                    MockResponse().setBody("""{"status":"OK"}""").addHeader("Set-Cookie",
+                        "session=renewed; Domain=example.test; Path=/; Secure; HttpOnly; Max-Age=3600")
+                }
+                "/config" -> MockResponse().setBody("{}")
+                "/login" -> MockResponse().setBody("""{"token":"new-token"}""")
+                else -> if (request.getHeader("Authorization") == "new-token") MockResponse().setBody("[]")
+                else {
+                    oldRequests.countDown()
+                    oldRequests.await(5, TimeUnit.SECONDS)
+                    MockResponse().setResponseCode(302).addHeader("Location", portal.toString())
+                }
+            }
+        }
+        val client = builder().cookieJar(session).addInterceptor(session.retryInterceptor)
+            .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Authorization", token).build()) }
+            .addNetworkInterceptor(session).build()
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val results = (1..2).map {
+                executor.submit<Int> {
+                    client.newCall(Request.Builder().url(api.resolve("subscriptions")!!).build()).execute().use { it.code }
+                }
+            }
+            results.forEach { assertEquals(200, it.get(15, TimeUnit.SECONDS)) }
+            assertEquals(1, logins.get())
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

@@ -82,7 +82,12 @@ object RetrofitInstance {
                 redactHeader("Set-Cookie")
             }
 
-            httpClient.addInterceptor(loggingInterceptor)
+            httpClient.addInterceptor { chain ->
+                // Piped's feed authenticates in its query string, which BASIC logs would expose.
+                if (chain.request().url.queryParameter("authToken") != null) {
+                    chain.proceed(chain.request())
+                } else loggingInterceptor.intercept(chain)
+            }
         }
 
         return httpClient.build()
