@@ -14,6 +14,9 @@ import androidx.fragment.app.setFragmentResult
 import androidx.lifecycle.lifecycleScope
 import com.github.libretube.BuildConfig
 import com.github.libretube.R
+import com.github.libretube.api.AutheliaAuth
+import com.github.libretube.api.RetrofitInstance
+import com.github.libretube.enums.SyncServerType
 import com.github.libretube.constants.IntentData
 import com.github.libretube.databinding.DialogLoginBinding
 import com.github.libretube.extensions.toastFromMainDispatcher
@@ -22,12 +25,19 @@ import com.github.libretube.repo.UserDataRepositoryHelper
 import com.github.libretube.ui.preferences.DataManagementSettings.Companion.INSTANCE_DIALOG_REQUEST_KEY
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class LoginDialog : DialogFragment() {
+    private var signInJob: Job? = null
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val binding = DialogLoginBinding.inflate(layoutInflater)
+        val usesPiped = UserDataRepositoryHelper.syncServerType == SyncServerType.PIPED
+        binding.autheliaPortalLayout.isVisible = usesPiped
+        if (usesPiped) binding.autheliaPortal.setText(
+            AutheliaAuth.session.portalFor(RetrofitInstance.pipedAuthUrl)
+        )
 
         lifecycleScope.launch {
             @Suppress("DEPRECATION")
@@ -60,12 +70,16 @@ class LoginDialog : DialogFragment() {
                     val password = binding.password.text?.toString()
 
                     if (!email.isNullOrEmpty() && !password.isNullOrEmpty()) {
-                        signIn(email, password)
+                        signIn(email, password, portalUrl = binding.autheliaPortal.text?.toString().orEmpty())
                     } else {
                         Toast.makeText(context, R.string.empty, Toast.LENGTH_SHORT).show()
                     }
                 }
                 getButton(DialogInterface.BUTTON_NEGATIVE).setOnClickListener {
+                    if (!binding.autheliaPortal.text.isNullOrBlank()) {
+                        Toast.makeText(context, R.string.authelia_register_unavailable, Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
                     val email = binding.username.text?.toString().orEmpty()
                     val password = binding.password.text?.toString().orEmpty()
 
@@ -80,9 +94,22 @@ class LoginDialog : DialogFragment() {
             }
     }
 
-    private fun signIn(username: String, password: String, createNewAccount: Boolean = false) {
-        lifecycleScope.launch(Dispatchers.IO) {
+    private fun signIn(
+        username: String,
+        password: String,
+        createNewAccount: Boolean = false,
+        portalUrl: String = ""
+    ) {
+        if (signInJob?.isActive == true) return
+        signInJob = lifecycleScope.launch(Dispatchers.IO) {
             @Suppress("DEPRECATION") val token = try {
+                if (UserDataRepositoryHelper.syncServerType == SyncServerType.PIPED) {
+                    if (portalUrl.isNotBlank()) {
+                        AutheliaAuth.session.login(RetrofitInstance.pipedAuthUrl, portalUrl.trim(), username, password)
+                    } else {
+                        AutheliaAuth.session.clear()
+                    }
+                }
                 if (createNewAccount) {
                     UserDataRepositoryHelper.userDataRepository.register(username, password)
                 } else {

@@ -1,6 +1,7 @@
 package com.github.libretube.repo
 
 import android.util.Log
+import com.github.libretube.api.AutheliaAuth
 import com.github.libretube.db.obj.DownloadItem
 import com.github.libretube.extensions.TAG
 import com.github.libretube.helpers.DownloadHelper
@@ -23,6 +24,9 @@ import kotlin.math.min
 class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .cookieJar(AutheliaAuth.session)
+            .addInterceptor(AutheliaAuth.session.retryInterceptor)
+            .addNetworkInterceptor(AutheliaAuth.session)
             .connectTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))
             .readTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))
             .retryOnConnectionFailure(true)

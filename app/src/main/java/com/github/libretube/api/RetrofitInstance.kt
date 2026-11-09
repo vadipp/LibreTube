@@ -58,6 +58,9 @@ object RetrofitInstance {
      */
     fun buildClient(headersAccessor: HeadersAccessor = { mapOf() }): OkHttpClient {
         val httpClient = OkHttpClient().newBuilder()
+            .cookieJar(AutheliaAuth.session)
+            .addInterceptor(AutheliaAuth.session.retryInterceptor)
+            .addNetworkInterceptor(AutheliaAuth.session)
 
         // add provided headers to all requests
         httpClient.addInterceptor { interceptorChain ->
@@ -72,10 +75,19 @@ object RetrofitInstance {
 
         if (BuildConfig.DEBUG) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                // Login payloads and account/session tokens must never appear in debug logs.
+                level = HttpLoggingInterceptor.Level.BASIC
+                redactHeader("Authorization")
+                redactHeader("Cookie")
+                redactHeader("Set-Cookie")
             }
 
-            httpClient.addInterceptor(loggingInterceptor)
+            httpClient.addInterceptor { chain ->
+                // Piped's feed authenticates in its query string, which BASIC logs would expose.
+                if (chain.request().url.queryParameter("authToken") != null) {
+                    chain.proceed(chain.request())
+                } else loggingInterceptor.intercept(chain)
+            }
         }
 
         return httpClient.build()

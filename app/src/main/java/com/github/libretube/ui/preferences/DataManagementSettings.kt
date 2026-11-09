@@ -9,6 +9,7 @@ import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.Preference
 import com.github.libretube.R
+import com.github.libretube.api.AutheliaAuth
 import com.github.libretube.api.RetrofitInstance
 import com.github.libretube.constants.IntentData
 import com.github.libretube.constants.PreferenceKeys
@@ -160,6 +161,7 @@ class DataManagementSettings : BasePreferenceFragment() {
     }
 
     private fun logoutAndUpdateUI(hasAuthSupport: Boolean) {
+        AutheliaAuth.session.clear()
         if (PreferenceHelper.getToken().isNotBlank()) {
             Toast.makeText(context, getString(R.string.loggedout), Toast.LENGTH_SHORT).show()
             PreferenceHelper.setToken("")
@@ -168,6 +170,7 @@ class DataManagementSettings : BasePreferenceFragment() {
     }
 
     private fun resetForNewInstance() {
+        logoutAndUpdateUI(true)
         RetrofitInstance.apiLazyMgr.reset()
         ActivityCompat.recreate(requireActivity())
     }
