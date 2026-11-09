@@ -52,12 +52,18 @@ jobs:
         run: |
           ./gradlew testDebugUnitTest assembleDebug -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
 
+      - name: Compile optimized release
+        if: github.ref_name == 'master'
+        shell: bash
+        run: |
+          ./gradlew assembleRelease -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee release-build.log
+
       - name: Publish compiler diagnostics
         if: always()
         run: |
           node <<'JS'
           const fs = require('fs');
-          const lines = ['auth-tests.log', 'build.log'].filter(p => fs.existsSync(p)).flatMap(p => fs.readFileSync(p, 'utf8').split('\n'));
+          const lines = ['auth-tests.log', 'build.log', 'release-build.log'].filter(p => fs.existsSync(p)).flatMap(p => fs.readFileSync(p, 'utf8').split('\n'));
           const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
           const errors = lines.filter(s => /(^e: |^error: |^Caused by: |^Execution failed|FAILED| > .*FAILED|^\s+at (com\.google\.devtools|ksp\.|org\.jetbrains))/.test(s));
           for (const line of errors.slice(0, 40)) console.log('::error::' + escape(line));
@@ -99,6 +105,7 @@ jobs:
             tools/auth-session-tests/build/test-results/
             auth-tests.log
             build.log
+            release-build.log
           if-no-files-found: ignore
 
       - name: Sign with persistent repository key
@@ -147,6 +154,7 @@ jobs:
           LibreTube $VERSION from branch $GITHUB_REF_NAME.
 
           Download the .apk asset directly; no ZIP extraction is needed.
+          Master builds include debug (com.github.libretube.debug) and optimized release (com.github.libretube).
           The .sha256 asset records its checksum.
 
           Source: $GITHUB_SHA

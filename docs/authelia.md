@@ -91,3 +91,10 @@ temporary runner key require a one-time uninstall before switching to this key;
 export any wanted app data first. Later builds can update in place and retain
 configuration. The signing secrets are not used for PRs and are never uploaded
 as artifacts. The signing script removes its temporary keystore on exit.
+
+Master builds include two signed APKs: `debug` is debuggable and installs as
+`com.github.libretube.debug`; `release` uses code/resource shrinking and installs
+as `com.github.libretube`. Both include the same functionality and CI version,
+and both use the saved signing key. They can coexist; their app data is separate.
+The release APK cannot update an official upstream install signed by another key.
+Feature branches publish debug APKs only.
