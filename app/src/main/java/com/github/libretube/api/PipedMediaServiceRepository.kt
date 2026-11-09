@@ -13,7 +13,9 @@ import com.github.libretube.api.obj.Streams
 import retrofit2.HttpException
 
 open class PipedMediaServiceRepository : MediaServiceRepository {
-    override fun getTrendingCategories(): List<TrendingCategory> = emptyList()
+    // Piped provides one uncategorized feed. A single pager key keeps Trends usable;
+    // the UI hides the category selector for a one-item list and the API ignores it.
+    override fun getTrendingCategories(): List<TrendingCategory> = listOf(TrendingCategory.GAMING)
 
     override suspend fun getTrending(region: String, category: TrendingCategory): List<StreamItem> =
         api.getTrending(region)
