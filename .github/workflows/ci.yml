@@ -19,9 +19,14 @@ on:
       - "assets/**"
       - ".github/**/*.md"
 
+permissions:
+  contents: read
+
 jobs:
   debug-builds:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     steps:
       - uses: actions/checkout@v6
       - uses: gradle/actions/wrapper-validation@v5
@@ -45,7 +50,7 @@ jobs:
       - name: Compile
         shell: bash
         run: |
-          ./gradlew testDebugUnitTest assembleDebug --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
+          ./gradlew testDebugUnitTest assembleDebug -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
 
       - name: Publish compiler diagnostics
         if: always()
@@ -96,63 +101,58 @@ jobs:
             build.log
           if-no-files-found: ignore
 
-      - name: Sign Apk
-        # Android already signs debug builds. Custom signing is only for nightly releases.
-        if: github.ref_name == 'master'
-        continue-on-error: true
-        id: sign_apk
-        uses: ilharp/sign-android-release@v2
-        with:
-          releaseDir: app/build/outputs/apk/debug
-          signingKey: ${{ secrets.ANDROID_SIGNING_KEY }}
-          keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Sign with persistent repository key
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash .github/scripts/sign-apk.sh
+
+      - name: Package versioned APK
+        id: package
+        run: node .github/scripts/package-apk.mjs
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
           name: app
-          path: app/build/outputs/apk/**/*.apk
+          path: dist/
           if-no-files-found: error
 
-  release-nightly:
-    if: github.ref_name == 'master'
+  publish-apk:
+    # PRs compile/test but cannot publish or use the persistent signing key.
+    if: github.event_name != 'pull_request'
     permissions:
       contents: write
     runs-on: ubuntu-latest
     needs: debug-builds
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Download Debug APK
-        uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v5
         with:
           name: app
-          path: .
+          path: dist
 
-      - name: Get Date and Time
+      - name: Publish directly downloadable APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.debug-builds.outputs.version }}
+        shell: bash
         run: |
-          echo "TIME=$(date -u +'%T')" >> $GITHUB_ENV
-          echo "DATE=$(date -u +'%d-%m-%Y')" >> $GITHUB_ENV
+          tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          cat > release-notes.txt <<EOF
+          LibreTube $VERSION from branch $GITHUB_REF_NAME.
 
-      - name: Create Nightly Tag
-        run: git tag -f nightly && git push -f origin nightly
+          Download the .apk asset directly; no ZIP extraction is needed.
+          The .sha256 asset records its checksum.
 
-      - name: Create Nightly Release
-        if: github.ref == 'refs/heads/master'
-        uses: ncipollo/release-action@v1
-        with:
-          token: ${{ github.token }}
-          tag:  nightly
-          makeLatest: true
-          prerelease: true
-          allowUpdates: true
-          updateOnlyUnreleased: true
-          artifacts: app-debug-signed.apk
-          name: LibreTube Nightly ${{ env.DATE }}
-          body: |
-            LibreTube Nightly build from ${{ env.DATE }} ${{ env.TIME }}
-
-            > [!NOTE]
-            > Nightly builds include features/fixes before the official release. Therefore, they are generally less stable than normal releases. Use nightly builds at your own risk.
+          Source: $GITHUB_SHA
+          CI: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+          gh release create "$tag" dist/*.apk dist/*.sha256 \
+            --target "$GITHUB_SHA" --title "LibreTube $VERSION ($GITHUB_REF_NAME)" \
+            --notes-file release-notes.txt --prerelease --latest=false
+          echo "Download: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"

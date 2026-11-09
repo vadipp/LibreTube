@@ -22,6 +22,9 @@ keyPassword=my_key_password
  */
 
 val keystoreProperties = Properties()
+val ciBuildNumber = providers.gradleProperty("ciBuildNumber").orNull?.toInt()?.also {
+    require(it in 1..2_000_000_000) { "Invalid CI build number" }
+}
 val keystoreFileExists = rootProject.file("keystore.properties").exists();
 if (keystoreFileExists) {
     keystoreProperties.load(rootProject.file("keystore.properties").inputStream())
@@ -34,8 +37,8 @@ android {
         applicationId = "com.github.libretube"
         minSdk = 26
         targetSdk = 36
-        versionCode = 72
-        versionName = "32.1"
+        versionCode = ciBuildNumber?.let { 100_000 + it } ?: 72
+        versionName = ciBuildNumber?.let { "32.1-fork.$it" } ?: "32.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resValue("string", "app_name", "LibreTube")
     }
