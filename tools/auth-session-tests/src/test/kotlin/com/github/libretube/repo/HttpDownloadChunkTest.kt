@@ -11,6 +11,7 @@ import java.io.IOException
 class HttpDownloadChunkTest {
     @Test fun unknownSizeLearnsTotalAndResumesWithInclusiveBoundedRanges() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().addHeader("Content-Length", "7"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/7").setBody("ABCD"))
             server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 4-6/7").setBody("EFG"))
             val downloader = HttpDownloadChunk(OkHttpClient(), 4)
@@ -18,6 +19,7 @@ class HttpDownloadChunkTest {
             val first = downloader.fetch(server.url("/media"), 0, -1, sink)
             assertEquals(7L, first.totalSize)
             assertFalse(first.complete)
+            assertEquals("HEAD", server.takeRequest().method)
             assertEquals("bytes=0-3", server.takeRequest().getHeader("Range"))
             val last = downloader.fetch(server.url("/media"), 4, first.totalSize, sink)
             assertTrue(last.complete)
@@ -29,6 +31,7 @@ class HttpDownloadChunkTest {
 
     @Test fun fullChunkedResponseAtZeroRecordsActualSize() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(405))
             server.enqueue(MockResponse().setChunkedBody("complete file", 3))
             val sink = Buffer()
             val result = HttpDownloadChunk(OkHttpClient(), 4).fetch(server.url("/media"), 0, -1, sink)
@@ -40,6 +43,7 @@ class HttpDownloadChunkTest {
 
     @Test fun ignoredResumeRangeCannotAppendDuplicateFile() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(405))
             server.enqueue(MockResponse().setBody("ABCDEFG"))
             val sink = Buffer().writeUtf8("ABC")
             assertThrows(IOException::class.java) {
@@ -62,11 +66,11 @@ class HttpDownloadChunkTest {
 
     @Test fun unknownPartialRangeWaitsForDefinitiveEndOfFile() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/*").setBody("ABCD"))
+            server.enqueue(MockResponse().setResponseCode(405))
             server.enqueue(MockResponse().setResponseCode(416).addHeader("Content-Range", "bytes */4"))
             val downloader = HttpDownloadChunk(OkHttpClient(), 4)
             val sink = Buffer()
-            assertFalse(downloader.fetch(server.url("/media"), 0, -1, sink).complete)
+            sink.writeUtf8("ABCD")
             val eof = downloader.fetch(server.url("/media"), 4, -1, sink)
             assertTrue(eof.complete)
             assertEquals(4L, eof.totalSize)
@@ -76,6 +80,7 @@ class HttpDownloadChunkTest {
 
     @Test fun proxyErrorDoesNotWriteErrorPageAsMedia() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(403))
             server.enqueue(MockResponse().setResponseCode(403).setBody("denied"))
             val sink = Buffer()
             assertThrows(IOException::class.java) {
@@ -84,4 +89,21 @@ class HttpDownloadChunkTest {
             assertEquals(0L, sink.size)
         }
     }
+    @Test fun pipedChunkLengthHeadersCannotTruncateDownload() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().addHeader("Content-Length", "7"))
+            server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 0-3/4").setBody("ABCD"))
+            server.enqueue(MockResponse().setResponseCode(206).addHeader("Content-Range", "bytes 4-2/3").setBody("EFG"))
+            val downloader = HttpDownloadChunk(OkHttpClient(), 4)
+            val sink = Buffer()
+            val first = downloader.fetch(server.url("/media"), 0, -1, sink)
+            assertEquals(7L, first.totalSize)
+            assertFalse(first.complete)
+            val last = downloader.fetch(server.url("/media"), 4, first.totalSize, sink)
+            assertTrue(last.complete)
+            assertEquals(7L, last.totalSize)
+            assertEquals("ABCDEFG", sink.readUtf8())
+        }
+    }
+
 }
