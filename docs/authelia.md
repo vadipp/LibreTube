@@ -43,6 +43,12 @@ first-factor-only rejection, and expiration errors using a local HTTPS server:
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
+To run the HTTP/session tests without the Android SDK or Room/KSP processing:
+
+```sh
+./gradlew -p tools/auth-session-tests test
+```
+
 Device verification: log in, load account playlists/feed and thumbnails, force-stop
 and reopen the app, then log out and verify a fresh login is required. Test an
 expired server session for a useful error. Download a video and verify playback

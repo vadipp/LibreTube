@@ -33,6 +33,10 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
 
+      - name: Test instance authentication independently of Android and KSP
+        run: |
+          ./gradlew -p tools/auth-session-tests test --no-parallel --max-workers=1 --no-configuration-cache --stacktrace 2>&1 | tee auth-tests.log
+
       - name: Compile
         run: |
           ./gradlew testDebugUnitTest assembleDebug --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
@@ -42,8 +46,7 @@ jobs:
         run: |
           node <<'JS'
           const fs = require('fs');
-          if (!fs.existsSync('build.log')) process.exit(0);
-          const lines = fs.readFileSync('build.log', 'utf8').split('\n');
+          const lines = ['auth-tests.log', 'build.log'].filter(p => fs.existsSync(p)).flatMap(p => fs.readFileSync(p, 'utf8').split('\n'));
           const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
           const errors = lines.filter(s => /(^e: |^error: |^Caused by: |^Execution failed|FAILED| > .*FAILED|^\s+at (com\.google\.devtools|ksp\.|org\.jetbrains))/.test(s));
           for (const line of errors.slice(0, 40)) console.log('::error::' + escape(line));
@@ -57,6 +60,9 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/test-results/
+            tools/auth-session-tests/build/reports/tests/
+            tools/auth-session-tests/build/test-results/
+            auth-tests.log
             build.log
           if-no-files-found: ignore
 
