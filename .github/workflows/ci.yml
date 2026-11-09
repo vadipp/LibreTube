@@ -35,7 +35,7 @@ jobs:
 
       - name: Compile
         run: |
-          ./gradlew assembleDebug
+          ./gradlew testDebugUnitTest assembleDebug
 
       - name: Sign Apk
         continue-on-error: true
@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: app
-          path: app/build/outputs/apk/debug/app-debug-signed.apk
+          path: app/build/outputs/apk/debug/*.apk
 
   release-nightly:
     if: github.ref_name == 'master'

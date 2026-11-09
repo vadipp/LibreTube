@@ -58,6 +58,8 @@ object RetrofitInstance {
      */
     fun buildClient(headersAccessor: HeadersAccessor = { mapOf() }): OkHttpClient {
         val httpClient = OkHttpClient().newBuilder()
+            .cookieJar(AutheliaAuth.session)
+            .addNetworkInterceptor(AutheliaAuth.session)
 
         // add provided headers to all requests
         httpClient.addInterceptor { interceptorChain ->
@@ -72,7 +74,11 @@ object RetrofitInstance {
 
         if (BuildConfig.DEBUG) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                // Login payloads and account/session tokens must never appear in debug logs.
+                level = HttpLoggingInterceptor.Level.BASIC
+                redactHeader("Authorization")
+                redactHeader("Cookie")
+                redactHeader("Set-Cookie")
             }
 
             httpClient.addInterceptor(loggingInterceptor)

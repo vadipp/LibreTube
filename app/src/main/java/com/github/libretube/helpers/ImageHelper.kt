@@ -20,6 +20,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.toBitmap
+import com.github.libretube.api.AutheliaAuth
 import com.github.libretube.BuildConfig
 import com.github.libretube.extensions.toAndroidUri
 import com.github.libretube.util.DataSaverMode
@@ -40,6 +41,8 @@ object ImageHelper {
      */
     fun initializeImageLoader(context: Context) {
         val httpClient = OkHttpClient().newBuilder()
+            .cookieJar(AutheliaAuth.session)
+            .addNetworkInterceptor(AutheliaAuth.session)
 
         if (BuildConfig.DEBUG) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
