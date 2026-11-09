@@ -295,11 +295,13 @@ class DownloadService : LifecycleService() {
 
         val sink = item.path.sink(StandardOpenOption.APPEND).buffer()
         var totalRead = item.path.fileSize()
+        var savedSize = item.downloadSize
         var numberOfTries = 0
         while (downloadQueue[item.id] && !item.isFinished) {
             try {
                 when (val result = downloadProvider.downloadNextChunk(item, sink)) {
                     DownloadProgressResult.DownloadComplete -> {
+                        Database.downloadDao().updateDownloadItem(item)
                         setPauseNotification(notificationBuilder, item, true)
                         _downloadFlow.emit(item.id to DownloadStatus.Completed)
                         downloadQueue[item.id] = false
@@ -317,6 +319,10 @@ class DownloadService : LifecycleService() {
                         }
                     }
                     is DownloadProgressResult.Progressed -> {
+                        if (savedSize != item.downloadSize) {
+                            Database.downloadDao().updateDownloadItem(item)
+                            savedSize = item.downloadSize
+                        }
                         numberOfTries = 0
                         totalRead += result.bytes
                         _downloadFlow.emit(
@@ -374,13 +380,13 @@ class DownloadService : LifecycleService() {
     ) {
         notificationBuilder
             .setContentText(
-                totalRead.formatAsFileSize() + " / " +
-                        item.downloadSize.formatAsFileSize()
+                if (item.downloadSize > 0) totalRead.formatAsFileSize() + " / " +
+                        item.downloadSize.formatAsFileSize() else totalRead.formatAsFileSize()
             )
             .setProgress(
-                item.downloadSize.toInt(),
+                item.downloadSize.coerceAtLeast(0).toInt(),
                 totalRead,
-                false
+                item.downloadSize <= 0
             )
         notificationManager.notify(
             item.getNotificationId(),
