@@ -25,6 +25,7 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(AutheliaAuth.session)
+            .addInterceptor(AutheliaAuth.session.retryInterceptor)
             .addNetworkInterceptor(AutheliaAuth.session)
             .connectTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))
             .readTimeout(Duration.ofMillis(DownloadHelper.DEFAULT_TIMEOUT.toLong()))

@@ -59,6 +59,7 @@ object RetrofitInstance {
     fun buildClient(headersAccessor: HeadersAccessor = { mapOf() }): OkHttpClient {
         val httpClient = OkHttpClient().newBuilder()
             .cookieJar(AutheliaAuth.session)
+            .addInterceptor(AutheliaAuth.session.retryInterceptor)
             .addNetworkInterceptor(AutheliaAuth.session)
 
         // add provided headers to all requests

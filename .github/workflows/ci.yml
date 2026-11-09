@@ -35,7 +35,30 @@ jobs:
 
       - name: Compile
         run: |
-          ./gradlew testDebugUnitTest assembleDebug
+          ./gradlew testDebugUnitTest assembleDebug --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
+
+      - name: Publish compiler diagnostics
+        if: failure()
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          if (!fs.existsSync('build.log')) process.exit(0);
+          const lines = fs.readFileSync('build.log', 'utf8').split('\n');
+          const escape = s => s.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+          const errors = lines.filter(s => /(^e: |^error: |^Caused by: |^Execution failed|FAILED| > .*FAILED|^\s+at (com\.google\.devtools|ksp\.|org\.jetbrains))/.test(s));
+          for (const line of errors.slice(0, 40)) console.log('::error::' + escape(line));
+          JS
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+            build.log
+          if-no-files-found: ignore
 
       - name: Sign Apk
         continue-on-error: true

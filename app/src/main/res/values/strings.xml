@@ -576,6 +576,6 @@
     <string name="comment_verified">Verified</string>
     <string name="comment_pinned">Pinned</string>
     <string name="authelia_portal">Authelia portal URL (optional)</string>
-    <string name="authelia_same_credentials">For protected Piped instances. Uses the username and password above for both logins. One-factor authentication only.</string>
+    <string name="authelia_same_credentials">For protected Piped instances. Saves the username and password above securely for automatic sign-in to both services. One-factor authentication only.</string>
     <string name="authelia_register_unavailable">Register the Piped account separately before using Authelia sign-in.</string>
 </resources>

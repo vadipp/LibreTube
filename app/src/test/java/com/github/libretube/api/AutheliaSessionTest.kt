@@ -50,7 +50,7 @@ class AutheliaSessionTest {
             .setBody("""{"imageProxyUrl":"https://proxy.example.test:${api.port}/"}"""))
     }
 
-    @Test fun `background login reuses credentials and persists cookies without passwords`() {
+    @Test fun `background login reuses credentials and keeps secrets out of diagnostics`() {
         enqueueLogin()
         val session = session()
         val password = "p@ss\"word"
@@ -64,6 +64,7 @@ class AutheliaSessionTest {
         assertEquals("/config", config.path)
         assertEquals("session=secret", config.getHeader("Cookie"))
         assertFalse(saved.toString().contains(password))
+        assertEquals(password, saved!!.password)
         assertEquals("secret", AutheliaSession(saved).loadForRequest(api).single().value)
     }
 
@@ -151,5 +152,46 @@ class AutheliaSessionTest {
             }
         assertNull(server.takeRequest().getHeader("Cookie"))
         assertNull(saved)
+    }
+
+    @Test fun `expired gateway session automatically renews both logins and retries once`() {
+        var token = "old-token"
+        val session = AutheliaSession(persist = { saved = it }, clientBuilder = ::builder,
+            updatePipedToken = { token = it })
+        enqueueLogin()
+        session.login(api.toString(), portal.toString(), "user", "password")
+        server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", portal.toString()))
+        enqueueLogin()
+        server.enqueue(MockResponse().setBody("""{"token":"new-token"}"""))
+        server.enqueue(MockResponse().setBody("[]"))
+        val client = builder().cookieJar(session).addInterceptor(session.retryInterceptor)
+            .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Authorization", token).build()) }
+            .addNetworkInterceptor(session).build()
+        client.newCall(Request.Builder().url(api.resolve("subscriptions")!!).build()).execute().use {
+            assertEquals(200, it.code)
+        }
+        val requests = (1..7).map { server.takeRequest() }
+        assertEquals(2, requests.count { it.path == "/authelia/api/firstfactor" })
+        assertEquals("/login", requests[5].path)
+        assertEquals("new-token", requests.last().getHeader("Authorization"))
+        assertNull(requests[3].getHeader("Authorization"))
+    }
+
+    @Test fun `failed automatic login stops rather than retrying bad credentials repeatedly`() {
+        enqueueLogin()
+        val session = session()
+        session.login(api.toString(), portal.toString(), "user", "password")
+        server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", portal.toString()))
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"status":"KO"}"""))
+        val client = builder().cookieJar(session).addInterceptor(session.retryInterceptor)
+            .addNetworkInterceptor(session).build()
+        repeat(2) { index ->
+            if (index == 1) server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", portal.toString()))
+            val error = assertThrows(IOException::class.java) {
+                client.newCall(Request.Builder().url(api.resolve("subscriptions")!!).build()).execute().close()
+            }
+            assertTrue(error.message!!.contains("Sign in again"))
+        }
+        assertEquals(5, server.requestCount)
     }
 }

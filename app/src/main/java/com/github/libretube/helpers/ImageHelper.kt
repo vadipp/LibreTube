@@ -42,6 +42,7 @@ object ImageHelper {
     fun initializeImageLoader(context: Context) {
         val httpClient = OkHttpClient().newBuilder()
             .cookieJar(AutheliaAuth.session)
+            .addInterceptor(AutheliaAuth.session.retryInterceptor)
             .addNetworkInterceptor(AutheliaAuth.session)
 
         if (BuildConfig.DEBUG) {

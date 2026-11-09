@@ -13,18 +13,22 @@ login instead. Leaving the portal field empty preserves ordinary Piped login.
 Registration through an Authelia-protected instance is not supported here.
 
 The app requests “remember me”. Session lifetime remains controlled by the server;
-it does not request an infinite lifetime or retain the password for automatic
-re-login. When access expires, sign in again through Account settings. The Piped
-token and Authelia cookie are independent. A server restart can invalidate the
-Authelia session even if its cookie has not expired.
+it does not request an infinite lifetime. The shared username and password are
+retained encrypted alongside the session. If the gateway rejects a session, the
+app signs in to Authelia and Piped again and retries the request once with the new
+cookie and Piped token. Concurrent expired requests share the refresh operation.
+A failed automatic login stops further attempts until you sign in manually (or
+restart the app), avoiding a loop of invalid-password requests. The Piped token
+and Authelia cookie are independent. A server restart can invalidate the Authelia
+session even if its cookie has not expired; automatic login handles that case.
 
-Session cookies are encrypted with an Android Keystore key and saved outside
+Credentials and session cookies are encrypted with an Android Keystore key and saved outside
 Android's backup directories. They are restricted to HTTPS and the exact
 configured API/portal origins, plus the image-proxy origin advertised by the
 authenticated instance configuration. Cookies are never automatically sent to
 other sibling sites, YouTube, SponsorBlock or other external services. Cookie
 renewal responses update the stored session. Signing out or switching account
-instances removes the local Authelia session; it does not revoke sessions on other
+instances removes the local credentials and Authelia session; it does not revoke sessions on other
 devices or delete existing offline downloads. Debug logging excludes login bodies
 and response bodies.
 
