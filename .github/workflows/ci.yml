@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   pull_request:
@@ -67,6 +71,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: Sign Apk
+        # Android already signs debug builds. Custom signing is only for nightly releases.
+        if: github.ref_name == 'master'
         continue-on-error: true
         id: sign_apk
         uses: ilharp/sign-android-release@v2
@@ -81,7 +87,8 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: app
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
 
   release-nightly:
     if: github.ref_name == 'master'
