@@ -112,8 +112,13 @@ class DownloadDialog : DialogFragment() {
         if (subtitles.isEmpty()) binding.subtitleSpinner.isGone = true
 
         binding.videoSpinner.items = videoStreams.map {
-            val fileSize = Formatter.formatShortFileSize(context, it.contentLength)
-            "${it.quality} ${it.codec} ($fileSize)"
+            val fileSize = it.contentLength.takeIf { size -> size > 0 }
+                ?.let { size -> Formatter.formatShortFileSize(context, size) }
+            val codec = it.codec?.takeIf { value -> value.isNotBlank() }
+                ?: it.mimeType?.substringAfter('/')?.uppercase() ?: it.format
+            listOfNotNull(it.quality, codec,
+                getString(R.string.audio_included).takeIf { _ -> it.videoOnly == false },
+                fileSize?.let { size -> "($size)" }).joinToString(" ")
         }.toMutableList().also {
             it.add(0, getString(R.string.no_video))
         }
@@ -126,7 +131,8 @@ class DownloadDialog : DialogFragment() {
                 .joinToString(", ")
             "${it.quality} ${it.format} ($infoStr)"
         }.toMutableList().also {
-            it.add(0, getString(R.string.no_audio))
+            it.add(0, getString(if (audioStreams.isEmpty() && videoStreams.any { stream -> stream.videoOnly == false })
+                R.string.no_separate_audio else R.string.no_audio))
         }
 
         binding.subtitleSpinner.items = subtitles.map { it.name.orEmpty() }.toMutableList().also {
