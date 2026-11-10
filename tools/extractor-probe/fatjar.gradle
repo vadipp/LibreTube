@@ -1,0 +1,15 @@
+allprojects {
+    afterEvaluate { p ->
+        if (p.name == 'extractor') {
+            tasks.register('probeJar', Jar) {
+                dependsOn tasks.named('classes')
+                archiveFileName = 'extractor-probe.jar'
+                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                manifest { attributes 'Main-Class': 'probe.ExtractorProbe' }
+                from sourceSets.main.output
+                from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+                exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+            }
+        }
+    }
+}
