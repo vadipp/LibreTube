@@ -1,0 +1,43 @@
+# Prepared example, not a deployment command. Build the image away from production.
+services:
+  extractor-adapter:
+    image: piped-extractor-adapter:prepared
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    mem_limit: 384m
+    memswap_limit: 384m
+    cpus: 0.5
+    pids_limit: 64
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      # Bundled Python must unpack shared libraries into an executable tmpfs.
+      - /tmp:rw,exec,nosuid,size=128m,mode=1777
+    environment:
+      PIPED_BACKEND_URL: http://piped-backend:8080
+      # Route probes through the existing nginx proxy virtual host.
+      PROXY_PROBE_URL: http://nginx-piped:80
+      PROXY_PROBE_HOST: proxy.example.org
+      PUBLIC_PROXY_URL: https://proxy.example.org
+      MAX_HEIGHT: "1080"
+      CACHE_SECONDS: "600"
+      CACHE_ENTRIES: "16"
+      EXTRACT_TIMEOUT_SECONDS: "70"
+      REQUEST_TIMEOUT_SECONDS: "110"
+    networks: [piped]
+    # No published ports. Existing ingress authenticates public requests.
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+networks:
+  piped:
+    external: true
+    name: replace-with-existing-piped-network

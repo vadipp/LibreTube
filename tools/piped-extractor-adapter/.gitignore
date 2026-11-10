@@ -1,0 +1,8 @@
+.env
+.env.*
+*.apk
+*.jar
+*.tar
+*.tar.gz
+node_modules/
+runtime/
