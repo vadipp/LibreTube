@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
+import android.os.Build
 import android.os.storage.StorageManager
 import android.widget.ImageView
 import androidx.core.content.getSystemService
@@ -67,15 +68,16 @@ object ImageHelper {
                 diskCachePolicy(CachePolicy.ENABLED)
                 memoryCachePolicy(CachePolicy.ENABLED)
 
-                val storageManager = context.getSystemService<StorageManager>()!!
-                val availableCache = storageManager.getCacheQuotaBytes(
-                    storageManager.getUuidForPath(context.coilFile)
-                )
-                val diskCache = DiskCache.Builder()
-                    .directory(context.coilFile)
-                    // only use a certain percentage of the available cache size for images
-                    .maxSizeBytes(availableCache)
-                    .build()
+                val cacheBuilder = DiskCache.Builder().directory(context.coilFile)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val storageManager = context.getSystemService<StorageManager>()!!
+                    val availableCache = storageManager.getCacheQuotaBytes(
+                        storageManager.getUuidForPath(context.coilFile)
+                    )
+                    cacheBuilder.maxSizeBytes(availableCache)
+                }
+                // Android 7 uses Coil's bounded default disk-cache sizing.
+                val diskCache = cacheBuilder.build()
                 diskCache(diskCache)
             }
             .build()

@@ -1,5 +1,7 @@
 package com.github.libretube.ui.adapters
 
+import androidx.appcompat.widget.TooltipCompat
+
 import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -140,9 +142,9 @@ class VideoCardsAdapter(private val columnWidthDp: Float? = null) :
                                 context.getDrawable(it)
                             )
                         }
-                        sponsorBadgeIcon.tooltipText =
+                        TooltipCompat.setTooltipText(sponsorBadgeIcon,
                             SponsorBlockLabelHelper.categoryLabel(category)
-                                ?.let { context.getString(it) }
+                                ?.let { context.getString(it) })
                     }
                 }
 

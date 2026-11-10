@@ -1,5 +1,7 @@
 package com.github.libretube.api.poToken
 
+import android.os.Build
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -37,7 +39,9 @@ class PoTokenWebView private constructor(
         webView.settings.apply {
             //noinspection SetJavaScriptEnabled we want to use JavaScript!
             javaScriptEnabled = true
-            safeBrowsingEnabled = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                safeBrowsingEnabled = false
+            }
             userAgentString = USER_AGENT
             blockNetworkLoads = true // the WebView does not need internet access
         }

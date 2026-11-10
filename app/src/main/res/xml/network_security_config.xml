@@ -5,6 +5,8 @@
         cleartextTrafficPermitted="true"
         tools:ignore="InsecureBaseConfiguration">
         <trust-anchors>
+            <!-- Android 7 lacks ISRG Root X1; retain normal chain/hostname verification. -->
+            <certificates src="@raw/isrg_root_x1" />
             <!-- Trust preinstalled CAs -->
             <certificates src="system" />
             <!-- Additionally trust user added CAs -->

@@ -441,7 +441,9 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                requireActivity().trackPipAnimationHintView(binding.player)
+                if (PictureInPictureCompat.isPictureInPictureAvailable(requireActivity())) {
+                    requireActivity().trackPipAnimationHintView(binding.player)
+                }
             }
         }
 

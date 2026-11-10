@@ -35,7 +35,7 @@ android {
 
     defaultConfig {
         applicationId = "com.github.libretube"
-        minSdk = 26
+        minSdk = 25
         targetSdk = 36
         versionCode = ciBuildNumber?.let { 100_000 + it } ?: 72
         versionName = ciBuildNumber?.let { "32.1-fork.$it" } ?: "32.1"
@@ -101,7 +101,8 @@ android {
     tasks.register("testClasses")
 
     lint {
-        abortOnError = false
+        abortOnError = true
+        checkOnly += setOf("NewApi", "InlinedApi")
         checkReleaseBuilds = false
     }
 
