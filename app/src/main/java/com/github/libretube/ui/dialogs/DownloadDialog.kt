@@ -26,6 +26,8 @@ import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.extensions.TAG
 import com.github.libretube.extensions.getWhileDigit
 import com.github.libretube.extensions.toastFromMainDispatcher
+import com.github.libretube.helpers.DownloadQueue
+import com.github.libretube.helpers.DownloadQueuePolicy
 import com.github.libretube.helpers.DownloadSelection
 import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.PlayerHelper
@@ -44,6 +46,8 @@ import kotlinx.coroutines.withContext
 class DownloadDialog : DialogFragment() {
     private lateinit var videoId: String
     private var onDownloadConfirm = {}
+    private var optionsGate: Job? = null
+    private var sourceJob: Job? = null
     private var storageJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,7 +58,43 @@ class DownloadDialog : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val binding = DialogDownloadBinding.inflate(layoutInflater)
 
-        fetchAvailableSources(binding)
+        binding.chooseDownloadQuality.setOnClickListener {
+            binding.chooseDownloadQuality.isGone = true
+            binding.loadingProgress.isVisible = true
+            binding.loadingStatus.setText(R.string.preparing_download_options)
+            fetchAvailableSources(binding)
+        }
+        optionsGate = lifecycleScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                DatabaseHolder.Database.downloadQueueDao().all().any { DownloadQueuePolicy.active(it.state) }
+            }
+            if (pending) {
+                binding.loadingProgress.isGone = true
+                binding.loadingStatus.setText(R.string.queue_manual_options)
+                binding.chooseDownloadQuality.isVisible = true
+            } else fetchAvailableSources(binding)
+        }
+        binding.queueDefaultDownload.setOnClickListener {
+            optionsGate?.cancel()
+            sourceJob?.cancel()
+            binding.queueDefaultDownload.isEnabled = false
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            requireActivity().windowManager.defaultDisplay.getRealMetrics(metrics)
+            lifecycleScope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        DownloadQueue.enqueue(requireContext(), videoId, binding.videoTitle.text.toString(), metrics.widthPixels, metrics.heightPixels)
+                    }
+                    Toast.makeText(context, R.string.queue_queued, Toast.LENGTH_SHORT).show()
+                    dismiss()
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) {
+                    binding.queueDefaultDownload.isEnabled = true
+                    Toast.makeText(context, R.string.download_options_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         showVideoAlreadyDownloadedWarning(binding)
 
         return MaterialAlertDialogBuilder(requireContext())
@@ -82,7 +122,7 @@ class DownloadDialog : DialogFragment() {
     }
 
     private fun fetchAvailableSources(binding: DialogDownloadBinding) {
-        lifecycleScope.launch {
+        sourceJob = lifecycleScope.launch {
             val response = try {
                 withContext(Dispatchers.IO) {
                     MediaServiceRepository.instance.getDownloadStreams(videoId)

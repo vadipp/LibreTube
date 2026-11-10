@@ -53,6 +53,7 @@ class LibreTubeApp : Application() {
         ShortcutHelper.createShortcuts(this)
 
         NewPipeExtractorInstance.init()
+        com.github.libretube.helpers.DownloadQueue.recover(this)
     }
 
     /**

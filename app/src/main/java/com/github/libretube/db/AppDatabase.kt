@@ -1,5 +1,7 @@
 package com.github.libretube.db
 
+import com.github.libretube.db.dao.DownloadQueueDao
+import com.github.libretube.db.obj.QueuedDownload
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -33,6 +35,7 @@ import com.github.libretube.db.obj.WatchPosition
 
 @Database(
     entities = [
+        QueuedDownload::class,
         WatchHistoryItem::class,
         WatchPosition::class,
         SearchHistoryItem::class,
@@ -50,7 +53,7 @@ import com.github.libretube.db.obj.WatchPosition
         SubscriptionGroup::class,
         SubscriptionsFeedItem::class
     ],
-    version = 25,
+    version = 26,
     autoMigrations = [
         AutoMigration(from = 7, to = 8),
         AutoMigration(from = 8, to = 9),
@@ -66,6 +69,8 @@ import com.github.libretube.db.obj.WatchPosition
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun downloadQueueDao(): DownloadQueueDao
+
     /**
      * Watch History
      */

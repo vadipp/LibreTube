@@ -75,6 +75,8 @@ import com.github.libretube.extensions.togglePlayPauseState
 import com.github.libretube.extensions.updateIfChanged
 import com.github.libretube.helpers.BackgroundHelper
 import com.github.libretube.helpers.DownloadProgressTracker
+import com.github.libretube.helpers.DownloadQueue
+import com.github.libretube.helpers.DownloadQueuePolicy
 import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
@@ -93,7 +95,6 @@ import com.github.libretube.ui.activities.NoInternetActivity
 import com.github.libretube.ui.adapters.VideoCardsAdapter
 import com.github.libretube.ui.base.BaseActivity
 import com.github.libretube.ui.dialogs.AddToPlaylistDialog
-import com.github.libretube.ui.dialogs.PlayOfflineDialog
 import com.github.libretube.ui.dialogs.ShareDialog
 import com.github.libretube.ui.extensions.animateDown
 import com.github.libretube.ui.extensions.getSystemInsets
@@ -139,6 +140,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
     private lateinit var playerController: MediaController
 
     // Video information passed by the intent
+    private var queuedDownloads = emptyMap<String, com.github.libretube.db.obj.QueuedDownload>()
     private lateinit var videoId: String
     private var playlistId: String? = null
     private var channelId: String? = null
@@ -442,7 +444,13 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                DownloadProgressTracker.downloads.sample(200).collect { renderDownloadProgress() }
+                launch { DownloadProgressTracker.downloads.sample(200).collect { renderDownloadProgress() } }
+                launch {
+                    DatabaseHolder.Database.downloadQueueDao().observe().collect { entries ->
+                        queuedDownloads = entries.filter { DownloadQueuePolicy.active(it.state) }.associateBy { it.videoId }
+                        renderDownloadProgress()
+                    }
+                }
             }
         }
 
@@ -474,39 +482,13 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         val localDownloadVersion = if (!isOffline && createNewSession) {
             runBlocking(Dispatchers.IO) {
-                DatabaseHolder.Database.downloadDao().findById(videoId)
+                val queued = DatabaseHolder.Database.downloadQueueDao().get(videoId)
+                if (queued != null && queued.state != "COMPLETE") null
+                else DatabaseHolder.Database.downloadDao().findById(videoId)
             }
         } else null
-        if (localDownloadVersion != null) {
-            // the dialog must also be visible when in fullscreen, thus we need to use the activity's
-            // fragment manager and not the one from [PlayerFragment]
-            val fragmentManager = requireActivity().supportFragmentManager
-
-            fragmentManager.setFragmentResultListener(
-                PlayOfflineDialog.PLAY_OFFLINE_DIALOG_REQUEST_KEY, viewLifecycleOwner
-            ) { _, bundle ->
-                isOffline = bundle.getBoolean(IntentData.isPlayingOffline)
-
-                // start a new playback session - the method will read `isOffline` and decide whether
-                // to play the downloaded video based on it, so it's enough to set `isOffline` here
-                attachToPlayerService(playerData, true)
-            }
-
-            val downloadInfo = DownloadHelper.extractDownloadInfoText(
-                requireContext(),
-                localDownloadVersion
-            ).toTypedArray()
-
-            PlayOfflineDialog().apply {
-                arguments = bundleOf(
-                    IntentData.videoId to videoId,
-                    IntentData.videoTitle to localDownloadVersion.download.title,
-                    IntentData.downloadInfo to downloadInfo
-                )
-            }.show(fragmentManager, null)
-        } else {
-            attachToPlayerService(playerData, createNewSession)
-        }
+        if (DownloadQueuePolicy.complete(localDownloadVersion)) isOffline = true
+        attachToPlayerService(playerData, createNewSession)
 
         val onBackPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -770,12 +752,16 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         binding.downloadProgressButton.setOnClickListener {
             val selectedVideo = videoId
-            if (DownloadProgressTracker.downloads.value[selectedVideo] == null) return@setOnClickListener
+            if (DownloadProgressTracker.downloads.value[selectedVideo] == null && queuedDownloads[selectedVideo] == null) return@setOnClickListener
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.cancel_video_download)
                 .setMessage(R.string.cancel_video_download_message)
                 .setNegativeButton(R.string.keep_downloading, null)
                 .setPositiveButton(R.string.cancel_video_download_action) { _, _ ->
+                    if (queuedDownloads[selectedVideo] != null) {
+                        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) { DownloadQueue.cancel(selectedVideo) }
+                        return@setPositiveButton
+                    }
                     val intent = Intent(requireContext(), DownloadService::class.java)
                         .setAction(DownloadService.ACTION_CANCEL_VIDEO)
                         .putExtra(IntentData.videoId, selectedVideo)
@@ -1498,9 +1484,14 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         val view = _binding ?: return
         val allowed = this::streams.isInitialized && !streams.isLive && !isOffline
         val progress = if (this::videoId.isInitialized) DownloadProgressTracker.downloads.value[videoId] else null
-        view.relPlayerDownload.isVisible = allowed && progress == null
-        view.downloadProgressButton.isVisible = allowed && progress != null
-        val percent = progress?.percent
+        val queued = if (this::videoId.isInitialized) queuedDownloads[videoId] else null
+        view.relPlayerDownload.isVisible = allowed && progress == null && queued == null
+        view.downloadProgressButton.isVisible = allowed && (progress != null || queued != null)
+        val percent = if (queued != null) {
+            if (queued.state == "DOWNLOADING" && queued.totalBytes > 0)
+                (queued.downloadedBytes.toDouble() / queued.totalBytes * 100).toInt().coerceIn(0, 100)
+            else null
+        } else progress?.percent
         view.downloadProgressCircle.isIndeterminate = percent == null
         if (percent != null) view.downloadProgressCircle.setProgressCompat(percent, true)
         view.downloadProgressPercent.text = percent?.let { "$it%" }.orEmpty()

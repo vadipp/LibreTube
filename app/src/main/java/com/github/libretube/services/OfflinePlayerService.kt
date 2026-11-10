@@ -144,7 +144,7 @@ open class OfflinePlayerService : AbstractPlayerService() {
     }
 
     private fun setMediaItem(downloadWithItems: DownloadWithItems) {
-        val downloadFiles = downloadWithItems.downloadItems.filter { it.path.exists() }
+        val downloadFiles = downloadWithItems.downloadItems.filter { it.isFinished }
 
         val videoUri = downloadFiles.firstOrNull { it.type == FileType.VIDEO }?.path?.toAndroidUri()
         val audioUri = downloadFiles.firstOrNull { it.type == FileType.AUDIO }?.path?.toAndroidUri()

@@ -596,4 +596,18 @@
     <string name="keep_downloading">Keep downloading</string>
     <string name="download_progress_cancel">Downloading %1$d%%. Tap to cancel.</string>
     <string name="download_waiting_cancel">Preparing download. Tap to cancel.</string>
+    <string name="queue_default_download">Queue default download</string>
+    <string name="choose_download_quality">Choose quality</string>
+    <string name="download_queue">Download queue</string>
+    <string name="download_queue_empty">No queued downloads</string>
+    <string name="queue_queued">Queued</string>
+    <string name="queue_downloading">Downloading</string>
+    <string name="queue_retry">Retry now</string>
+    <string name="queue_retry_wait">Waiting to retry the connection</string>
+    <string name="queue_waiting_space">Waiting for storage with 0.5 GB free after download</string>
+    <string name="queue_waiting_size">Waiting for a download size estimate</string>
+    <string name="queue_attention">Needs attention — video unavailable or login required. Tap to retry.</string>
+    <string name="queue_instance_changed">Waiting for the original instance and account</string>
+    <string name="queue_cancelling">Cancelling…</string>
+    <string name="queue_manual_options">A batch is queued. Queue this video too, or choose quality for a manual download.</string>
 </resources>

@@ -88,6 +88,15 @@ object DatabaseHolder {
     @DeleteColumn(tableName = "downloadItem", columnName = "url")
     class MIGRATION_23_24 : AutoMigrationSpec
 
+    val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS queuedDownload (" +
+                "videoId TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL, " +
+                "screenWidth INTEGER NOT NULL, screenHeight INTEGER NOT NULL, createdAt INTEGER NOT NULL, " +
+                "state TEXT NOT NULL, selection TEXT, downloadedBytes INTEGER NOT NULL, totalBytes INTEGER NOT NULL)")
+        }
+    }
+
     val Database by lazy {
         Room.databaseBuilder(LibreTubeApp.instance, AppDatabase::class.java, DATABASE_NAME)
             .addMigrations(
@@ -98,7 +107,8 @@ object DatabaseHolder {
                 MIGRATION_15_16,
                 MIGRATION_17_18,
                 MIGRATION_21_22,
-                MIGRATION_22_23
+                MIGRATION_22_23,
+                MIGRATION_25_26
             )
             .build()
     }

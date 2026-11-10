@@ -239,6 +239,9 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentDownloadContentBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
+        binding.downloadQueueButton.setOnClickListener {
+            com.github.libretube.ui.dialogs.DownloadQueueDialog().show(childFragmentManager, "download-queue")
+        }
 
         adapter =
             DownloadsAdapter(

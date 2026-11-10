@@ -7,6 +7,20 @@
     android:orientation="vertical"
     android:paddingHorizontal="20dp">
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/queue_default_download"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/queue_default_download"
+        app:icon="@drawable/ic_download" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/choose_download_quality"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:text="@string/choose_download_quality" />
+
     <TextView
         android:id="@+id/loading_status"
         android:layout_width="match_parent"

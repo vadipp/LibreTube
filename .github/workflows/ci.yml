@@ -136,6 +136,13 @@ jobs:
             release-build.log
           if-no-files-found: ignore
 
+      - name: Upload database schema
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: database-schemas
+          path: app/schemas/
+
       - name: Sign with persistent repository key
         if: github.event_name != 'pull_request'
         shell: bash
