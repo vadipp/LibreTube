@@ -1,0 +1,42 @@
+name: Build extractor adapter image
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/download-only-extractor]
+    paths:
+      - tools/piped-extractor-adapter/**
+      - .github/workflows/adapter-image.yml
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Run adapter regression tests
+        run: node --test tools/piped-extractor-adapter/test/*.test.mjs
+      - name: Build and verify deployable image
+        shell: bash
+        run: |
+          image="piped-extractor-adapter:$GITHUB_SHA"
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" tools/piped-extractor-adapter
+          flags=(--memory=384m --memory-swap=384m --cpus=0.5 --pids-limit=64 --read-only --tmpfs /tmp:rw,exec,nosuid,size=128m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges)
+          test "$(docker run --rm "${flags[@]}" --entrypoint /opt/yt-dlp "$image" --version)" = 2026.10.26
+          docker run -d --name adapter-image-smoke --network=none "${flags[@]}" "$image"
+          trap 'docker rm -f adapter-image-smoke >/dev/null 2>&1 || true' EXIT
+          sleep 2
+          docker exec adapter-image-smoke node --input-type=module -e "import assert from 'node:assert/strict'; const root='http://127.0.0.1:8080'; assert.equal((await fetch(root+'/healthz')).status,200); assert.equal((await fetch(root+'/streams/ABCDEFGHIJK')).status,404); assert.equal((await fetch(root+'/downloads/streams/ABCDEFGHIJK',{method:'OPTIONS'})).status,200);"
+          mkdir bundle
+          docker save "$image" | gzip > bundle/adapter-image.tar.gz
+          (cd bundle && sha256sum adapter-image.tar.gz > adapter-image.tar.gz.sha256)
+          docker image inspect "$image" --format '{{.Id}}' > bundle/image-id.txt
+          printf '%s\n' "$GITHUB_SHA" > bundle/revision.txt
+      - uses: actions/upload-artifact@v6
+        with:
+          name: piped-extractor-adapter-image
+          path: bundle/
+          retention-days: 7
