@@ -20,6 +20,11 @@ class DownloadQueueDatabaseTest {
     private fun open(name: String) = Room.databaseBuilder(context, AppDatabase::class.java, name)
         .addMigrations(DatabaseHolder.MIGRATION_25_26).build()
 
+    private suspend fun withDatabase(name: String, block: suspend (AppDatabase) -> Unit) {
+        val database = open(name)
+        try { block(database) } finally { database.close() }
+    }
+
     @Test fun migrationPreservesDownloadsAndQueueSurvivesDatabaseReopen() = runBlocking {
         val name = "queue-migration-test"
         context.deleteDatabase(name)
@@ -36,17 +41,24 @@ class DownloadQueueDatabaseTest {
             old.execSQL("INSERT INTO download(videoId,title,description,uploader,duration,views,likes,dislikes) VALUES ('ABCDEFGHIJK','Existing download','','',60,0,0,0)")
             old.version = 25
         }
-        open(name).use { db ->
+        val media = com.github.libretube.helpers.DownloadHelper.getDownloadDir(context,
+            com.github.libretube.helpers.DownloadHelper.VIDEO_DIR).resolve("migration-fixture.bin")
+        java.nio.file.Files.write(media, byteArrayOf(1, 2, 3))
+        withDatabase(name) { db ->
+            db.downloadDao().insertDownloadItem(com.github.libretube.db.obj.DownloadItem(
+                type = com.github.libretube.enums.FileType.VIDEO, videoId = "ABCDEFGHIJK",
+                fileName = "migration-fixture.bin", path = media, downloadSize = 3))
             assertEquals("Existing download", db.downloadDao().findById("ABCDEFGHIJK")?.download?.title)
             db.downloadQueueDao().put(QueuedDownload("LMNOPQRSTUV", "Queued fixture", "local", 1280, 720, 1, selection = "[]", downloadedBytes = 123))
         }
-        open(name).use { db ->
+        withDatabase(name) { db ->
             val saved = db.downloadQueueDao().get("LMNOPQRSTUV")!!
             assertEquals("QUEUED", saved.state)
             assertEquals(123L, saved.downloadedBytes)
             assertEquals("[]", saved.selection)
-            assertNotNull(db.downloadDao().findById("ABCDEFGHIJK"))
+            assertTrue(db.downloadDao().findById("ABCDEFGHIJK")!!.downloadItems.single().isFinished)
         }
+        java.nio.file.Files.deleteIfExists(media)
         context.deleteDatabase(name)
         Unit
     }
@@ -54,7 +66,7 @@ class DownloadQueueDatabaseTest {
     @Test fun cancellationWinsOverLateProgressAndResolution() = runBlocking {
         val name = "queue-cancel-test"
         context.deleteDatabase(name)
-        open(name).use { db ->
+        withDatabase(name) { db ->
             val dao = db.downloadQueueDao()
             dao.put(QueuedDownload("ABCDEFGHIJK", "Fixture", "local", 1280, 720, 1))
             dao.requestCancel("ABCDEFGHIJK")
