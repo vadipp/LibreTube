@@ -56,7 +56,13 @@ object DownloadHelper {
         val intent = Intent(context, DownloadService::class.java)
             .putExtra(IntentData.downloadData, downloadData)
 
-        ContextCompat.startForegroundService(context, intent)
+        if (downloadData != null) DownloadProgressTracker.preparing(downloadData.videoId)
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: Exception) {
+            downloadData?.let { DownloadProgressTracker.remove(it.videoId) }
+            throw e
+        }
     }
 
     fun DownloadItem.getNotificationId(): Int {

@@ -43,6 +43,7 @@ import com.github.libretube.extensions.toLocalDate
 import com.github.libretube.extensions.toastFromMainDispatcher
 import com.github.libretube.extensions.toastFromMainThread
 import com.github.libretube.helpers.DownloadHelper
+import com.github.libretube.helpers.DownloadProgressTracker
 import com.github.libretube.helpers.DownloadHelper.getNotificationId
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NetworkHelper
@@ -60,6 +61,8 @@ import com.github.libretube.repo.RawByteStreamDownloadProvider
 import com.github.libretube.repo.SabrDownloadProvider
 import com.github.libretube.ui.activities.MainActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -75,6 +78,7 @@ import okio.sink
 import java.net.HttpURLConnection
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.createFile
@@ -103,6 +107,10 @@ class DownloadService : LifecycleService() {
     /**
      * Cache that contains all the already-loaded video info.
      */
+    private val cancelledVideos = ConcurrentHashMap.newKeySet<String>()
+    private val preparationJobs = ConcurrentHashMap<String, Job>()
+    private val itemJobs = mutableMapOf<Int, Job>()
+
     private val cachedStreamsInfo: MutableMap<String, Streams> = mutableMapOf()
 
     override fun onCreate() {
@@ -142,22 +150,39 @@ class DownloadService : LifecycleService() {
             ACTION_RESUME_ALL -> resumeAll()
         }
 
+        if (intent?.action == ACTION_CANCEL_VIDEO) {
+            intent.getStringExtra(IntentData.videoId)?.let { cancelVideo(it) }
+            return START_NOT_STICKY
+        }
+
         registerNetworkChangedCallback()
 
         val downloadData = intent?.parcelableExtra<DownloadData>(IntentData.downloadData)
             ?: return START_NOT_STICKY
         val videoId = downloadData.videoId
+        cancelledVideos.remove(videoId)
+        DownloadProgressTracker.preparing(videoId)
 
         lifecycleScope.launch(coroutineContext) {
-            val streams = loadStreamsInfo(videoId) ?: return@launch
+            val streams = loadStreamsInfo(videoId) ?: run {
+                DownloadProgressTracker.remove(videoId)
+                return@launch
+            }
+            if (videoId in cancelledVideos) return@launch
 
             storeVideoMetadata(videoId, streams)
 
+            if (videoId in cancelledVideos) return@launch
             val downloadItems = streams.toDownloadItems(downloadData)
-            for (downloadItem in downloadItems) {
-                start(downloadItem)
+            for (item in downloadItems) {
+                prepare(item)
+                item.id = Database.downloadDao().insertDownloadItem(item).toInt()
             }
-        }
+            if (videoId in cancelledVideos) return@launch
+            if (downloadItems.isEmpty()) DownloadProgressTracker.remove(videoId)
+            else DownloadProgressTracker.items(videoId, downloadItems.associate { it.id to it.downloadSize })
+            for (item in downloadItems) launchItem(item)
+        }.also { preparationJobs[videoId] = it }
 
         return START_NOT_STICKY
     }
@@ -170,6 +195,8 @@ class DownloadService : LifecycleService() {
             withContext(Dispatchers.IO) {
                 MediaServiceRepository.instance.getDownloadStreams(videoId)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG(), e.stackTraceToString())
             toastFromMainDispatcher(e.localizedMessage.orEmpty())
@@ -263,7 +290,11 @@ class DownloadService : LifecycleService() {
      */
     @SuppressLint("UnsafeOptInUsageError")
     private suspend fun selectFormatAndDownloadFile(item: DownloadItem) {
-        val streams = loadStreamsInfo(item.videoId) ?: return
+        DownloadProgressTracker.ensureItem(item.videoId, item.id, item.downloadSize)
+        val streams = loadStreamsInfo(item.videoId) ?: run {
+            DownloadProgressTracker.remove(item.videoId)
+            return
+        }
         if (item.type == FileType.SUBTITLE) {
             // subtitles are always plain files and don't use SABR
             val subtitle = streams.subtitles.firstOrNull { it.code == item.language } ?: return
@@ -297,58 +328,63 @@ class DownloadService : LifecycleService() {
         var totalRead = item.path.fileSize()
         var savedSize = item.downloadSize
         var numberOfTries = 0
-        while (downloadQueue[item.id] && !item.isFinished) {
-            try {
-                when (val result = downloadProvider.downloadNextChunk(item, sink)) {
-                    DownloadProgressResult.DownloadComplete -> {
-                        Database.downloadDao().updateDownloadItem(item)
-                        setPauseNotification(notificationBuilder, item, true)
-                        _downloadFlow.emit(item.id to DownloadStatus.Completed)
-                        downloadQueue[item.id] = false
-                        break
-                    }
-                    DownloadProgressResult.Failed -> {
-                        if (numberOfTries < MAX_SEGMENT_RETRIES) {
-                            // try to download segment again after a short delay
-                            delay(200)
-                            numberOfTries++
-                        } else {
-                            setPauseNotification(notificationBuilder, item, false)
-                            pause(item.id)
+        try {
+            while (downloadQueue[item.id] && !item.isFinished && item.videoId !in cancelledVideos) {
+                try {
+                    when (val result = downloadProvider.downloadNextChunk(item, sink)) {
+                        DownloadProgressResult.DownloadComplete -> {
+                            Database.downloadDao().updateDownloadItem(item)
+                            setPauseNotification(notificationBuilder, item, true)
+                            DownloadProgressTracker.status(item.videoId, item.id, DownloadStatus.Completed)
+                            _downloadFlow.emit(item.id to DownloadStatus.Completed)
+                            downloadQueue[item.id] = false
                             break
                         }
-                    }
-                    is DownloadProgressResult.Progressed -> {
-                        if (savedSize != item.downloadSize) {
-                            Database.downloadDao().updateDownloadItem(item)
-                            savedSize = item.downloadSize
+                        DownloadProgressResult.Failed -> {
+                            if (numberOfTries < MAX_SEGMENT_RETRIES) {
+                                // try to download segment again after a short delay
+                                delay(200)
+                                numberOfTries++
+                            } else {
+                                setPauseNotification(notificationBuilder, item, false)
+                                pause(item.id)
+                                break
+                            }
                         }
-                        numberOfTries = 0
-                        totalRead += result.bytes
-                        _downloadFlow.emit(
-                            item.id to DownloadStatus.Progress(
-                                result.bytes,
-                                totalRead,
-                                item.downloadSize
+                        is DownloadProgressResult.Progressed -> {
+                            if (savedSize != item.downloadSize) {
+                                Database.downloadDao().updateDownloadItem(item)
+                                savedSize = item.downloadSize
+                            }
+                            numberOfTries = 0
+                            totalRead += result.bytes
+                            DownloadProgressTracker.status(item.videoId, item.id,
+                                DownloadStatus.Progress(result.bytes, totalRead, item.downloadSize))
+                            _downloadFlow.emit(
+                                item.id to DownloadStatus.Progress(
+                                    result.bytes,
+                                    totalRead,
+                                    item.downloadSize
+                                )
                             )
-                        )
-                        updateNotification(notificationBuilder, item, totalRead.toInt())
+                            updateNotification(notificationBuilder, item, totalRead.toInt())
+                        }
                     }
+                } catch (_: CancellationException) {
+                    break
+                } catch (e: Exception) {
+                    toastFromMainThread("${getString(R.string.download)}: ${e.message}")
+                    Log.e(this@DownloadService::class.java.name, e.stackTraceToString())
+                    DownloadProgressTracker.remove(item.videoId)
+                    _downloadFlow.emit(item.id to DownloadStatus.Error(e.message.toString(), e))
+                    break
                 }
-            } catch (_: CancellationException) {
-                break
-            } catch (e: Exception) {
-                toastFromMainThread("${getString(R.string.download)}: ${e.message}")
-                Log.e(this@DownloadService::class.java.name, e.stackTraceToString())
-                _downloadFlow.emit(item.id to DownloadStatus.Error(e.message.toString(), e))
-                break
             }
-        }
 
-        withContext(Dispatchers.IO) {
-            sink.flush()
-            sink.close()
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { sink.close() }
         }
+        if (item.videoId in cancelledVideos) return
 
         // start the next download if there are any remaining ones enqueued
         startNextEnqueueDownload()
@@ -366,7 +402,7 @@ class DownloadService : LifecycleService() {
             if (downloadQueue[id]) continue
 
             val dbItem = Database.downloadDao().findDownloadItemById(id)
-            if (dbItem != null && (dbItem.downloadSize <= 0L || dbItem.path.fileSize() < dbItem.downloadSize)) {
+            if (dbItem != null && dbItem.videoId !in cancelledVideos && (dbItem.downloadSize <= 0L || dbItem.path.fileSize() < dbItem.downloadSize)) {
                 resume(id)
                 return
             }
@@ -407,21 +443,42 @@ class DownloadService : LifecycleService() {
      * Initiate download [Job] using [DownloadItem] by creating file according to [FileType]
      * for the requested file.
      */
-    private fun start(item: DownloadItem) {
+    private fun prepare(item: DownloadItem) {
         item.path = when (item.type) {
             FileType.AUDIO -> getDownloadPath(DownloadHelper.AUDIO_DIR, item.fileName)
             FileType.VIDEO -> getDownloadPath(DownloadHelper.VIDEO_DIR, item.fileName)
             FileType.SUBTITLE -> getDownloadPath(DownloadHelper.SUBTITLE_DIR, item.fileName)
         }.apply { deleteIfExists() }.createFile()
+    }
 
+    private fun launchItem(item: DownloadItem) {
+        itemJobs[item.id] = lifecycleScope.launch(coroutineContext) {
+            if (item.videoId in cancelledVideos) return@launch
+            if (mayStartNewDownload()) selectFormatAndDownloadFile(item)
+            else pause(item.id)
+        }
+    }
+
+    private fun cancelVideo(videoId: String) {
+        cancelledVideos.add(videoId)
         lifecycleScope.launch(coroutineContext) {
-            item.id = Database.downloadDao().insertDownloadItem(item).toInt()
-
-            if (mayStartNewDownload()) {
-                selectFormatAndDownloadFile(item)
-            } else {
-                pause(item.id)
+            preparationJobs.remove(videoId)?.cancelAndJoin()
+            val download = Database.downloadDao().getDownloadById(videoId)
+            for (item in download?.downloadItems.orEmpty()) {
+                downloadQueue.delete(item.id)
+                itemJobs.remove(item.id)?.cancelAndJoin()
+                notificationManager.cancel(item.getNotificationId())
+                if (!item.isFinished) {
+                    withContext(Dispatchers.IO) { item.path.deleteIfExists() }
+                    Database.downloadDao().deleteDownloadItemById(item.id)
+                    _downloadFlow.emit(item.id to DownloadStatus.Stopped)
+                }
             }
+            if (download != null && download.downloadItems.none { it.isFinished }) {
+                DownloadHelper.deleteDownloadIncludingFiles(download)
+            }
+            DownloadProgressTracker.remove(videoId)
+            stopServiceIfDone()
         }
     }
 
@@ -442,7 +499,7 @@ class DownloadService : LifecycleService() {
 
         lifecycleScope.launch(coroutineContext) {
             val file = Database.downloadDao().findDownloadItemById(id) ?: return@launch
-            selectFormatAndDownloadFile(file)
+            launchItem(file)
         }
     }
 
@@ -509,7 +566,8 @@ class DownloadService : LifecycleService() {
      * Stop service if no downloads are active
      */
     private fun stopServiceIfDone() {
-        if (downloadQueue.valueIterator().asSequence().none { it }) {
+        if (downloadQueue.valueIterator().asSequence().none { it } &&
+            preparationJobs.values.none { it.isActive }) {
             ServiceCompat.stopForeground(this@DownloadService, ServiceCompat.STOP_FOREGROUND_DETACH)
             sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
             stopSelf()
@@ -659,6 +717,7 @@ class DownloadService : LifecycleService() {
 
     override fun onDestroy() {
         downloadQueue.clear()
+        DownloadProgressTracker.clear()
         IS_DOWNLOAD_RUNNING = false
         sendBroadcast(Intent(ACTION_SERVICE_STOPPED))
         super.onDestroy()
@@ -682,6 +741,8 @@ class DownloadService : LifecycleService() {
             "com.github.libretube.services.DownloadService.ACTION_SERVICE_STOPPED"
         const val ACTION_RESUME_ALL =
             "com.github.libretube.services.DownloadService.ACTION_RESUME_ALL"
+
+        const val ACTION_CANCEL_VIDEO = "com.github.libretube.services.DownloadService.CANCEL_VIDEO"
 
         private const val MAX_SEGMENT_RETRIES = 3
         var IS_DOWNLOAD_RUNNING = false
