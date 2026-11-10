@@ -35,7 +35,7 @@ class DownloadQueueDatabaseTest {
                 val entity = schema.getJSONObject(i)
                 val table = entity.getString("tableName")
                 old.execSQL(entity.getString("createSql").replace("\${TABLE_NAME}", table))
-                val indices = entity.getJSONArray("indices")
+                val indices = entity.optJSONArray("indices") ?: org.json.JSONArray()
                 for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql").replace("\${TABLE_NAME}", table))
             }
             old.execSQL("INSERT INTO download(videoId,title,description,uploader,duration,views,likes,dislikes) VALUES ('ABCDEFGHIJK','Existing download','','',60,0,0,0)")
