@@ -193,6 +193,7 @@ dependencies {
     /* Testing */
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
 }
 
 //TODO: exclude from release protobuf
