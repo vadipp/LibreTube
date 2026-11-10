@@ -12,6 +12,8 @@ import com.github.libretube.api.obj.StreamItem
 import com.github.libretube.api.obj.Streams
 import com.github.libretube.extensions.toID
 import retrofit2.HttpException
+import retrofit2.Retrofit
+import java.util.concurrent.TimeUnit
 
 open class PipedMediaServiceRepository : MediaServiceRepository {
     // Piped provides one uncategorized feed. A single pager key keeps Trends usable;
@@ -21,9 +23,22 @@ open class PipedMediaServiceRepository : MediaServiceRepository {
     override suspend fun getTrending(region: String, category: TrendingCategory): List<StreamItem> =
         api.getTrending(region).map(PipedItemNormalizer::stream)
 
-    override suspend fun getStreams(videoId: String): Streams {
+    override suspend fun getStreams(videoId: String): Streams = loadStreams(videoId, forDownload = false)
+
+    override suspend fun getDownloadStreams(videoId: String): Streams = loadStreams(videoId, forDownload = true)
+
+    private suspend fun loadStreams(videoId: String, forDownload: Boolean): Streams {
         return try {
-            api.getStreams(videoId.toID()).also {
+            val id = videoId.toID()
+            val streams = if (forDownload) {
+                try {
+                    downloadApi.getDownloadStreams(id)
+                } catch (e: HttpException) {
+                    // Ordinary Piped instances, or an unavailable optional adapter, keep working.
+                    if (e.code() in listOf(404, 501, 502, 503, 504)) api.getStreams(id) else throw e
+                }
+            } else api.getStreams(id)
+            streams.also {
                 it.relatedStreams = it.relatedStreams.map(PipedItemNormalizer::stream)
                 it.isShort = it.videoStreams.firstOrNull()?.let { stream ->
                     (stream.height ?: 0) > (stream.width ?: 0)
@@ -109,6 +124,19 @@ open class PipedMediaServiceRepository : MediaServiceRepository {
 
         private val api by resettableLazy(RetrofitInstance.apiLazyMgr) {
             RetrofitInstance.buildRetrofitInstance<PipedApi>(apiUrl)
+        }
+
+        // Only download preparation waits for server extraction; player timeouts stay unchanged.
+        private val downloadApi by resettableLazy(RetrofitInstance.apiLazyMgr) {
+            Retrofit.Builder()
+                .baseUrl(apiUrl)
+                .client(RetrofitInstance.buildClient().newBuilder()
+                    .readTimeout(125, TimeUnit.SECONDS)
+                    .callTimeout(150, TimeUnit.SECONDS)
+                    .build())
+                .addConverterFactory(RetrofitInstance.kotlinxConverterFactory)
+                .build()
+                .create(PipedApi::class.java)
         }
     }
 }

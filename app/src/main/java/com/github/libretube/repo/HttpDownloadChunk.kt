@@ -1,5 +1,6 @@
 package com.github.libretube.repo
 
+import okhttp3.Call
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -7,7 +8,11 @@ import okio.BufferedSink
 import java.io.IOException
 
 /** HTTP download logic independent of Android, including unknown lengths and resume validation. */
-class HttpDownloadChunk(private val client: OkHttpClient, private val maxBytes: Long = 512 * 1024L) {
+class HttpDownloadChunk(
+    private val client: OkHttpClient,
+    private val maxBytes: Long = 512 * 1024L,
+    private val onCall: (Call) -> Unit = {}
+) {
     data class Result(val bytes: Long, val totalSize: Long?, val complete: Boolean)
 
     fun fetch(url: HttpUrl, offset: Long, expectedSize: Long?, sink: BufferedSink): Result {
@@ -19,7 +24,7 @@ class HttpDownloadChunk(private val client: OkHttpClient, private val maxBytes: 
             if (knownSize != null) header("Range", "bytes=$offset-$end")
             else if (offset > 0) header("Range", "bytes=$offset-")
         }.build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).also(onCall).execute().use { response ->
             val range = response.header("Content-Range")
             if (response.code == 416) {
                 val total = range?.substringAfter("bytes */", "")?.toLongOrNull()
@@ -68,7 +73,7 @@ class HttpDownloadChunk(private val client: OkHttpClient, private val maxBytes: 
         }
     }
     private fun probeSize(url: HttpUrl): Long? = try {
-        client.newCall(Request.Builder().url(url).head().build()).execute().use {
+        client.newCall(Request.Builder().url(url).head().build()).also(onCall).execute().use {
             if (it.isSuccessful) it.header("Content-Length")?.toLongOrNull()?.takeIf { size -> size > 0 }
             else null
         }

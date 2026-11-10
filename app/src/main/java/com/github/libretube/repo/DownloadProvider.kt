@@ -23,6 +23,9 @@ sealed class DownloadProgressResult {
 }
 
 interface DownloadProvider {
+    /** Stop active network work before the service closes and removes partial files. */
+    fun cancel() = Unit
+
     /**
      * Start or continue downloading from `byteStartPosition`.
      */

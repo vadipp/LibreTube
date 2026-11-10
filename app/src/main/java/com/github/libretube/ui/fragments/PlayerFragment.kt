@@ -74,6 +74,7 @@ import com.github.libretube.extensions.toID
 import com.github.libretube.extensions.togglePlayPauseState
 import com.github.libretube.extensions.updateIfChanged
 import com.github.libretube.helpers.BackgroundHelper
+import com.github.libretube.helpers.DownloadProgressTracker
 import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.ImageHelper
 import com.github.libretube.helpers.NavigationHelper
@@ -83,6 +84,7 @@ import com.github.libretube.helpers.ThemeHelper
 import com.github.libretube.helpers.WindowHelper
 import com.github.libretube.obj.ShareData
 import com.github.libretube.parcelable.PlayerData
+import com.github.libretube.services.DownloadService
 import com.github.libretube.services.AbstractPlayerService
 import com.github.libretube.services.OfflinePlayerService
 import com.github.libretube.services.OnlinePlayerService
@@ -111,7 +113,9 @@ import com.github.libretube.util.PlayingQueue
 import com.github.libretube.util.TextUtils
 import com.github.libretube.util.TextUtils.toTimeInSeconds
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -401,6 +405,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         )
     }
 
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = FragmentPlayerBinding.bind(view)
         super.onViewCreated(view, savedInstanceState)
@@ -434,6 +439,12 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
         initializeTransitionLayout()
         initializeOnClickActions()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                DownloadProgressTracker.downloads.sample(200).collect { renderDownloadProgress() }
+            }
+        }
 
         if (PlayerHelper.autoFullscreenEnabled && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             setFullscreen()
@@ -755,6 +766,21 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             if (!this::streams.isInitialized) return@setOnClickListener
 
             DownloadHelper.startDownloadDialog(requireContext(), childFragmentManager, videoId)
+        }
+
+        binding.downloadProgressButton.setOnClickListener {
+            val selectedVideo = videoId
+            if (DownloadProgressTracker.downloads.value[selectedVideo] == null) return@setOnClickListener
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.cancel_video_download)
+                .setMessage(R.string.cancel_video_download_message)
+                .setNegativeButton(R.string.keep_downloading, null)
+                .setPositiveButton(R.string.cancel_video_download_action) { _, _ ->
+                    val intent = Intent(requireContext(), DownloadService::class.java)
+                        .setAction(DownloadService.ACTION_CANCEL_VIDEO)
+                        .putExtra(IntentData.videoId, selectedVideo)
+                    ContextCompat.startForegroundService(requireContext(), intent)
+                }.show()
         }
 
         binding.relPlayerScreenshot.setOnClickListener {
@@ -1171,7 +1197,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             )
             playerChannelSubCount.isVisible = streams.uploaderSubscriberCount >= 0
 
-            relPlayerDownload.isVisible = !streams.isLive && !isOffline
+            renderDownloadProgress()
         }
         playerControlsBinding.exoTitle.text = streams.title
 
@@ -1466,6 +1492,20 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
 
     fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         return _binding?.player?.onKeyUp(keyCode, event) ?: false
+    }
+
+    private fun renderDownloadProgress() {
+        val view = _binding ?: return
+        val allowed = this::streams.isInitialized && !streams.isLive && !isOffline
+        val progress = if (this::videoId.isInitialized) DownloadProgressTracker.downloads.value[videoId] else null
+        view.relPlayerDownload.isVisible = allowed && progress == null
+        view.downloadProgressButton.isVisible = allowed && progress != null
+        val percent = progress?.percent
+        view.downloadProgressCircle.isIndeterminate = percent == null
+        if (percent != null) view.downloadProgressCircle.setProgressCompat(percent, true)
+        view.downloadProgressPercent.text = percent?.let { "$it%" }.orEmpty()
+        view.downloadProgressButton.contentDescription = if (percent == null)
+            getString(R.string.download_waiting_cancel) else getString(R.string.download_progress_cancel, percent)
     }
 
     override fun onDestroyView() {

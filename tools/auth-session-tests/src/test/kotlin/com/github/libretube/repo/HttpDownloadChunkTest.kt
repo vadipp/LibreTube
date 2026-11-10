@@ -108,4 +108,14 @@ class HttpDownloadChunkTest {
         }
     }
 
+    @Test fun cancellationHookStopsMediaRequestsBeforeWritingBytes() {
+        MockWebServer().use { server ->
+            val sink = Buffer()
+            val downloader = HttpDownloadChunk(OkHttpClient(), onCall = { it.cancel() })
+            assertThrows(IOException::class.java) {
+                downloader.fetch(server.url("/media"), 0, 100, sink)
+            }
+            assertEquals(0L, sink.size)
+        }
+    }
 }

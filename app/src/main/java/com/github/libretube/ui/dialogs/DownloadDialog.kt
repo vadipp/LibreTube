@@ -2,10 +2,13 @@ package com.github.libretube.ui.dialogs
 
 import android.app.Dialog
 import android.content.DialogInterface
+import android.os.StatFs
+import android.util.DisplayMetrics
 import android.os.Bundle
 import android.text.format.Formatter
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -23,11 +26,17 @@ import com.github.libretube.db.DatabaseHolder
 import com.github.libretube.extensions.TAG
 import com.github.libretube.extensions.getWhileDigit
 import com.github.libretube.extensions.toastFromMainDispatcher
+import com.github.libretube.helpers.DownloadSelection
 import com.github.libretube.helpers.DownloadHelper
 import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.parcelable.DownloadData
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +44,7 @@ import kotlinx.coroutines.withContext
 class DownloadDialog : DialogFragment() {
     private lateinit var videoId: String
     private var onDownloadConfirm = {}
+    private var storageJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +64,7 @@ class DownloadDialog : DialogFragment() {
             .setNegativeButton(R.string.cancel, null)
             .show()
             .apply {
+                getButton(DialogInterface.BUTTON_POSITIVE).isEnabled = false
                 getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                     onDownloadConfirm.invoke()
                 }
@@ -74,14 +85,21 @@ class DownloadDialog : DialogFragment() {
         lifecycleScope.launch {
             val response = try {
                 withContext(Dispatchers.IO) {
-                    MediaServiceRepository.instance.getStreams(videoId)
+                    MediaServiceRepository.instance.getDownloadStreams(videoId)
                 }
-            }  catch (e: Exception) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                binding.loadingProgress.isGone = true
+                binding.loadingStatus.setText(R.string.download_options_failed)
                 Log.e(TAG(), e.stackTraceToString())
                 context?.toastFromMainDispatcher(e.localizedMessage.orEmpty())
                 return@launch
             }
+            binding.loadingProgress.isGone = true
+            binding.loadingStatus.isGone = true
             initDownloadOptions(binding, response)
+            (dialog as? AlertDialog)?.getButton(DialogInterface.BUTTON_POSITIVE)?.isEnabled = true
         }
     }
 
@@ -139,7 +157,63 @@ class DownloadDialog : DialogFragment() {
             it.add(0, getString(R.string.no_subtitle))
         }
 
-        restorePreviousSelections(binding, videoStreams, audioStreams, subtitles)
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        requireActivity().windowManager.defaultDisplay.getRealMetrics(metrics)
+        binding.videoSpinner.selectedItemPosition =
+            (DownloadSelection.videoIndex(videoStreams, metrics.widthPixels, metrics.heightPixels) ?: -1) + 1
+        binding.audioSpinner.selectedItemPosition = if (audioStreams.isEmpty()) 0 else 1
+        subtitles.indexOfFirst { it.code == getSel(SUBTITLE_LANGUAGE) }.takeIf { it >= 0 }?.let {
+            binding.subtitleSpinner.selectedItemPosition = it + 1
+        }
+
+        fun refreshStorage() {
+            storageJob?.cancel()
+            storageJob = lifecycleScope.launch {
+                val available = withContext(Dispatchers.IO) {
+                    runCatching {
+                        StatFs(DownloadHelper.getDownloadDir(requireContext(), DownloadHelper.VIDEO_DIR).toString())
+                            .availableBytes
+                    }.getOrNull()
+                }
+                val chosen = listOfNotNull(
+                    videoStreams.getOrNull(binding.videoSpinner.selectedItemPosition - 1),
+                    audioStreams.getOrNull(binding.audioSpinner.selectedItemPosition - 1)
+                )
+                val estimate = DownloadSelection.estimatedBytes(
+                    chosen, streams.duration, binding.subtitleSpinner.selectedItemPosition > 0
+                )
+                val remaining = if (available != null && estimate != null) available - estimate else null
+                val warning = available != null && (remaining ?: available) < DownloadSelection.LOW_SPACE_BYTES
+                val text = if (available == null) getString(R.string.download_storage_unavailable) else {
+                    val free = Formatter.formatShortFileSize(context, available)
+                    when {
+                        estimate == null -> getString(R.string.download_storage_unknown_size, free) +
+                            if (warning) "\n" + getString(R.string.download_storage_low) else ""
+                        remaining!! < 0 -> getString(R.string.download_storage_insufficient, free,
+                            Formatter.formatShortFileSize(context, estimate))
+                        else -> getString(R.string.download_storage_estimate, free,
+                            Formatter.formatShortFileSize(context, estimate),
+                            Formatter.formatShortFileSize(context, remaining)) +
+                            if (warning) "\n" + getString(R.string.download_storage_low) else ""
+                    }
+                }
+                binding.storageStatus.text = text
+                binding.storageStatus.setTextColor(MaterialColors.getColor(binding.storageStatus,
+                    if (warning) androidx.appcompat.R.attr.colorError
+                    else com.google.android.material.R.attr.colorOnSurfaceVariant))
+                binding.storageStatus.setTypeface(null, if (warning) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            }
+        }
+        binding.videoSpinner.setOnSelectionChangeListener { refreshStorage() }
+        binding.audioSpinner.setOnSelectionChangeListener { refreshStorage() }
+        binding.subtitleSpinner.setOnSelectionChangeListener { refreshStorage() }
+        lifecycleScope.launch {
+            while (isActive) {
+                refreshStorage()
+                delay(5000)
+            }
+        }
 
         onDownloadConfirm = onDownloadConfirm@{
             val videoPosition = binding.videoSpinner.selectedItemPosition - 1
@@ -188,59 +262,6 @@ class DownloadDialog : DialogFragment() {
     }
 
     private fun getSel(key: String) = PreferenceHelper.getString(key, "")
-
-    /**
-     * Restore the download selections from a previous session
-     */
-    private fun restorePreviousSelections(
-        binding: DialogDownloadBinding,
-        videoStreams: List<PipedStream>,
-        audioStreams: List<PipedStream>,
-        subtitles: List<Subtitle>
-    ) {
-        getStreamSelection(
-            videoStreams,
-            getSel(VIDEO_DOWNLOAD_QUALITY),
-            getSel(VIDEO_DOWNLOAD_FORMAT)
-        )?.let {
-            binding.videoSpinner.selectedItemPosition = it + 1
-        }
-        getStreamSelection(
-            audioStreams,
-            getSel(AUDIO_DOWNLOAD_QUALITY),
-            getSel(AUDIO_DOWNLOAD_FORMAT)
-        )?.let {
-            binding.audioSpinner.selectedItemPosition = it + 1
-        }
-
-        subtitles.indexOfFirst { it.code == getSel(SUBTITLE_LANGUAGE) }.takeIf { it != -1 }?.let {
-            binding.subtitleSpinner.selectedItemPosition = it + 1
-        }
-    }
-
-    private fun getStreamSelection(
-        streams: List<PipedStream>,
-        quality: String,
-        format: String
-    ): Int? {
-        if (quality.isBlank()) return null
-
-        streams.forEachIndexed { index, pipedStream ->
-            if (quality == pipedStream.quality && format == pipedStream.format) return index
-        }
-
-        streams.forEachIndexed { index, pipedStream ->
-            if (quality == pipedStream.quality) return index
-        }
-
-        val qualityInt = quality.getWhileDigit() ?: return null
-
-        streams.forEachIndexed { index, pipedStream ->
-            if ((pipedStream.quality.getWhileDigit() ?: Int.MAX_VALUE) < qualityInt) return index
-        }
-
-        return null
-    }
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
