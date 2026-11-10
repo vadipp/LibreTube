@@ -184,7 +184,7 @@ class PlaylistDownloadEnqueueService : LifecycleService() {
             // only download videos that have not been downloaded before
             if (!DatabaseHolder.Database.downloadDao().exists(videoId)) {
                 val videoInfo = runCatching {
-                    MediaServiceRepository.instance.getStreams(videoId)
+                    MediaServiceRepository.instance.getDownloadStreams(videoId)
                 }.getOrNull()
 
                 if (videoInfo != null) {

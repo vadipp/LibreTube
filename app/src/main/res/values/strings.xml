@@ -165,6 +165,8 @@
     <string name="audio">Audio</string>
     <string name="video">Video</string>
     <string name="downloading">Downloading…</string>
+    <string name="preparing_download_options">Preparing download options…</string>
+    <string name="download_options_failed">Could not load download options</string>
     <string name="download_paused">Download paused</string>
     <string name="download_completed">Download completed</string>
     <string name="concurrent_downloads_limit_reached">Max concurrent downloads limit reached.</string>

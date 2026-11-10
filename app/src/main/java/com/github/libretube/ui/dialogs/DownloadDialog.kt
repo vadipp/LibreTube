@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.text.format.Formatter
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -28,6 +29,7 @@ import com.github.libretube.helpers.PlayerHelper
 import com.github.libretube.helpers.PreferenceHelper
 import com.github.libretube.parcelable.DownloadData
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,6 +56,7 @@ class DownloadDialog : DialogFragment() {
             .setNegativeButton(R.string.cancel, null)
             .show()
             .apply {
+                getButton(DialogInterface.BUTTON_POSITIVE).isEnabled = false
                 getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                     onDownloadConfirm.invoke()
                 }
@@ -74,14 +77,21 @@ class DownloadDialog : DialogFragment() {
         lifecycleScope.launch {
             val response = try {
                 withContext(Dispatchers.IO) {
-                    MediaServiceRepository.instance.getStreams(videoId)
+                    MediaServiceRepository.instance.getDownloadStreams(videoId)
                 }
-            }  catch (e: Exception) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                binding.loadingProgress.isGone = true
+                binding.loadingStatus.setText(R.string.download_options_failed)
                 Log.e(TAG(), e.stackTraceToString())
                 context?.toastFromMainDispatcher(e.localizedMessage.orEmpty())
                 return@launch
             }
+            binding.loadingProgress.isGone = true
+            binding.loadingStatus.isGone = true
             initDownloadOptions(binding, response)
+            (dialog as? AlertDialog)?.getButton(DialogInterface.BUTTON_POSITIVE)?.isEnabled = true
         }
     }
 

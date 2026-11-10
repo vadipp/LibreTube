@@ -168,7 +168,7 @@ class DownloadService : LifecycleService() {
 
         val streams = try {
             withContext(Dispatchers.IO) {
-                MediaServiceRepository.instance.getStreams(videoId)
+                MediaServiceRepository.instance.getDownloadStreams(videoId)
             }
         } catch (e: Exception) {
             Log.e(TAG(), e.stackTraceToString())

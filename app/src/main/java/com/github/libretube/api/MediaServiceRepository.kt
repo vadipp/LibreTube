@@ -18,6 +18,7 @@ interface MediaServiceRepository {
 
     suspend fun getTrending(region: String, category: TrendingCategory): List<StreamItem>
     suspend fun getStreams(videoId: String): Streams
+    suspend fun getDownloadStreams(videoId: String): Streams = getStreams(videoId)
     suspend fun getComments(videoId: String): CommentsPage
     suspend fun getSegments(
         videoId: String,

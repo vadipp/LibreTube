@@ -20,6 +20,9 @@ interface PipedApi {
     @GET("streams/{videoId}")
     suspend fun getStreams(@Path("videoId") videoId: String): Streams
 
+    @GET("downloads/streams/{videoId}")
+    suspend fun getDownloadStreams(@Path("videoId") videoId: String): Streams
+
     @GET("comments/{videoId}")
     suspend fun getComments(@Path("videoId") videoId: String): CommentsPage
 
