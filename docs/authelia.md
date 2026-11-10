@@ -41,7 +41,7 @@ Authelia cookies through the player, HLS/subtitles, images and downloads.
 Piped mode does not silently switch to local extraction: direct YouTube media
 URLs or redirects are rejected. Restart any currently playing video or active
 download after changing the mode. Turning the option off retains upstream local
-playback. Neither branch adds support for older Android versions.
+playback. Both extraction modes support Android 7.1 (API 25) or newer.
 
 Tests cover TLS cookie scope, persistence, credential encoding, redirect handling,
 first-factor-only rejection, and expiration errors using a local HTTPS server:
@@ -86,15 +86,22 @@ Configure these repository Actions secrets before publishing:
 All published branch builds use this same key. Publishing fails if a secret is
 missing or signature verification fails. Keep a private backup of the keystore;
 replacing it prevents Android from accepting updates to existing installations.
-The package remains `com.github.libretube.debug`. Older builds signed with a
+The debug package remains `com.github.libretube.debug`. Older builds signed with a
 temporary runner key require a one-time uninstall before switching to this key;
 export any wanted app data first. Later builds can update in place and retain
 configuration. The signing secrets are not used for PRs and are never uploaded
 as artifacts. The signing script removes its temporary keystore on exit.
 
-## Android 7.1 backport branch
+Master builds include two signed APKs: `debug` is debuggable and installs as
+`com.github.libretube.debug`; `release` uses code/resource shrinking and installs
+as `com.github.libretube`. Both include the same functionality and CI version,
+and both use the saved signing key. They can coexist; their app data is separate.
+The release APK cannot update an official upstream install signed by another key.
+Feature branches publish debug APKs only.
 
-The API 25 branch restores guards around Oreo-only picture-in-picture, HDR and
+## Android 7.1 compatibility
+
+The fork restores guards around Oreo-only picture-in-picture, HDR and
 cache-quota APIs. Android 7 uses Coil's default disk-cache sizing and has PiP
 disabled. Core-library desugaring remains enabled for time/NIO APIs used by
 playback and downloads. Only API 25 resources additionally trust the bundled,

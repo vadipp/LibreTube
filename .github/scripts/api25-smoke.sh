@@ -3,7 +3,7 @@ set -euo pipefail
 mkdir -p api25-smoke
 package=com.github.libretube.debug
 [[ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" == 25 ]]
-mapfile -t apks < <(find dist -maxdepth 1 -name '*.apk')
+mapfile -t apks < <(find dist -maxdepth 1 -name '*-debug-*.apk')
 [[ "${#apks[@]}" == 1 ]]
 adb install --no-streaming "${apks[0]}"
 adb logcat -c
