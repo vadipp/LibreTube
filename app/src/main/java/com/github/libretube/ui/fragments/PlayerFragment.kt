@@ -490,7 +490,10 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
                 DownloadQueuePolicy.complete(saved, expected)
             }
         } else false
-        if (localDownloadComplete) isOffline = true
+        if (localDownloadComplete) {
+            isOffline = true
+            requireArguments().putParcelable(IntentData.playerData, playerData.copy(isOffline = true))
+        }
         attachToPlayerService(playerData, createNewSession)
 
         val onBackPressedCallback = object : OnBackPressedCallback(true) {

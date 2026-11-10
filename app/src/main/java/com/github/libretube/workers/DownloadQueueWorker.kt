@@ -155,6 +155,8 @@ class DownloadQueueWorker(context: Context, params: WorkerParameters) : Coroutin
                 ?: throw Waiting("RETRY")
         }
         if (selected.isEmpty()) throw Waiting("ATTENTION")
+        if (selected.any { it.videoOnly == true } && selected.none { it.mimeType?.startsWith("audio/") == true })
+            throw Waiting("RETRY")
         val fresh = selected.map { stream ->
             val length = stream.contentLength.takeIf { it > 0 } ?: probeSize(stream)
             stream.copy(contentLength = length ?: -1,

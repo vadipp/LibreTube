@@ -61,6 +61,7 @@ object DownloadQueue {
         // WorkManager persists the actual work; this also repairs a process death between
         // inserting the application queue row and enqueuing the WorkRequest.
         scope.launch {
+            for (entry in Database.downloadQueueDao().all().filter { it.state == "CANCELLING" }) cleanupCancelled(entry.videoId)
             if (Database.downloadQueueDao().all().any { DownloadQueuePolicy.active(it.state) }) {
                 ensureRecovery(context)
                 schedule(context)
