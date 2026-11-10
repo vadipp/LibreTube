@@ -25,3 +25,11 @@ for variant in "${variants[@]}"; do
   "$build_tools/apksigner" verify --verbose --print-certs "$apk"
   unzip -t "$apk" > /dev/null
 done
+
+# Instrumentation must use the same certificate as the installed target APK.
+for apk in app/build/outputs/apk/androidTest/debug/*.apk; do
+  [[ -f "$apk" ]] || continue
+  "$build_tools/apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" \
+    --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD "$apk"
+  "$build_tools/apksigner" verify --verbose "$apk"
+done

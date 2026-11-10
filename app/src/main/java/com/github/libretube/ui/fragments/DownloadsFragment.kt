@@ -23,6 +23,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.commit
 import androidx.fragment.app.replace
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -267,7 +269,7 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
                 playlist.downloadVideos.map { it.videoId }
             }
 
-            val downloads = withContext(Dispatchers.IO) {
+            var downloads = withContext(Dispatchers.IO) {
                 Database.downloadDao().getAll()
             }.let { downloads ->
                 if (downloadTab != DownloadTab.PLAYLIST) downloads.filterByTab(downloadTab)
@@ -275,6 +277,21 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
             }
 
             submitDownloadList(downloads)
+            viewLifecycleOwner.lifecycleScope.launch {
+                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    Database.downloadQueueDao().observe().collect { entries ->
+                        binding.downloadQueueButton.text = getString(R.string.download_queue) +
+                            " (" + entries.count { com.github.libretube.helpers.DownloadQueuePolicy.active(it.state) } + ")"
+                        downloads = withContext(Dispatchers.IO) { Database.downloadDao().getAll() }.let { all ->
+                            if (downloadTab != DownloadTab.PLAYLIST) all.filterByTab(downloadTab)
+                            else all.filter { playlistItems.orEmpty().contains(it.download.videoId) }
+                        }
+                        submitDownloadList(downloads)
+                        adapter.notifyDataSetChanged()
+                        toggleVisibilities()
+                    }
+                }
+            }
 
             binding.sortType.setOnClickListener {
                 BaseBottomSheet().setItems(filterOptions.toList()) { index ->

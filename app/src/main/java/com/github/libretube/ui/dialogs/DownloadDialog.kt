@@ -57,6 +57,7 @@ class DownloadDialog : DialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val binding = DialogDownloadBinding.inflate(layoutInflater)
+        binding.videoTitle.text = arguments?.getString(IntentData.videoTitle).orEmpty()
 
         binding.chooseDownloadQuality.setOnClickListener {
             binding.chooseDownloadQuality.isGone = true

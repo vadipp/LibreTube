@@ -18,7 +18,13 @@ object DownloadQueuePolicy {
         remaining >= 0 && available >= DownloadSelection.LOW_SPACE_BYTES &&
             remaining <= available - DownloadSelection.LOW_SPACE_BYTES
 
-    fun complete(download: DownloadWithItems?): Boolean {
+    fun complete(download: DownloadWithItems?, expected: List<PipedStream>? = null): Boolean {
+        if (expected != null) return expected.isNotEmpty() && expected.all { stream ->
+            download?.downloadItems.orEmpty().any { item ->
+                item.format == stream.format && item.quality == stream.quality &&
+                    item.language == stream.audioTrackLocale && item.isFinished
+            }
+        }
         val media = download?.downloadItems?.filter { it.type != FileType.SUBTITLE }.orEmpty()
         return media.isNotEmpty() && media.all { it.isFinished }
     }

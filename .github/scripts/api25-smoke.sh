@@ -21,3 +21,10 @@ if grep -q "Process: $package," api25-smoke/logcat.txt; then
   echo '::error::The app crashed on API 25; inspect the emulator report.'
   exit 1
 fi
+
+mapfile -t test_apks < <(find android-test -name '*.apk')
+[[ "${#test_apks[@]}" == 1 ]]
+adb install --no-streaming "${test_apks[0]}"
+adb shell am instrument -w -r "$package.test/androidx.test.runner.AndroidJUnitRunner" | tee api25-smoke/queue-tests.txt
+grep -q 'OK (2 tests)' api25-smoke/queue-tests.txt
+if grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed' api25-smoke/queue-tests.txt; then exit 1; fi

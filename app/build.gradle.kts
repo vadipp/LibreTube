@@ -192,6 +192,7 @@ dependencies {
 
     /* Testing */
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
 }
 
 //TODO: exclude from release protobuf

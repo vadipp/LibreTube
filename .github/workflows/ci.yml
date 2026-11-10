@@ -77,7 +77,7 @@ jobs:
       - name: Compile
         shell: bash
         run: |
-          ./gradlew testDebugUnitTest lintDebug assembleDebug -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
+          ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest -PciBuildNumber="$GITHUB_RUN_NUMBER" --no-parallel --max-workers=1 --no-configuration-cache -Pksp.incremental=false --stacktrace 2>&1 | tee build.log
 
       - name: Compile optimized release
         if: github.ref_name == 'master'
@@ -157,6 +157,13 @@ jobs:
         id: package
         run: node .github/scripts/package-apk.mjs
 
+      - name: Upload queue instrumentation tests
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-test-apk
+          path: app/build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
@@ -174,6 +181,10 @@ jobs:
         with:
           name: app
           path: dist
+      - uses: actions/download-artifact@v5
+        with:
+          name: android-test-apk
+          path: android-test
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Install and open on Android 7.1

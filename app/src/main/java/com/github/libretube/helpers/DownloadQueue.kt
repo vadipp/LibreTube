@@ -43,6 +43,7 @@ object DownloadQueue {
             if ((existing == null || existing.state == "COMPLETE") && DownloadQueuePolicy.complete(Database.downloadDao().findById(videoId))) return@withTransaction
             Database.downloadQueueDao().put(QueuedDownload(videoId, title, source(), width, height, System.currentTimeMillis()))
         }
+        ensureRecovery(context)
         schedule(context)
     }
 
@@ -59,8 +60,14 @@ object DownloadQueue {
         // WorkManager persists the actual work; this also repairs a process death between
         // inserting the application queue row and enqueuing the WorkRequest.
         scope.launch {
-            if (Database.downloadQueueDao().all().any { DownloadQueuePolicy.active(it.state) }) schedule(context)
+            if (Database.downloadQueueDao().all().any { DownloadQueuePolicy.active(it.state) }) {
+                ensureRecovery(context)
+                schedule(context)
+            }
         }
+    }
+
+    private fun ensureRecovery(context: Context) {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             "$WORK-recovery", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<DownloadQueueRecoveryWorker>(15, TimeUnit.MINUTES).build()

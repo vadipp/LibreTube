@@ -118,4 +118,26 @@ class HttpDownloadChunkTest {
             assertEquals(0L, sink.size)
         }
     }
+    @Test fun connectionLossResumesPartialBytesUsingAFreshSignedUrl() {
+        MockWebServer().use { server ->
+            val content = "ABCDEFGH"
+            server.enqueue(MockResponse().setResponseCode(206)
+                .setHeader("Content-Range", "bytes 0-7/8").setBody(content)
+                .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY))
+            val sink = Buffer()
+            val downloader = HttpDownloadChunk(OkHttpClient(), 8)
+            assertThrows(IOException::class.java) {
+                downloader.fetch(server.url("/media?signature=expired"), 0, 8, sink)
+            }
+            val partial = sink.size
+            assertTrue(partial in 1..7)
+            server.enqueue(MockResponse().setResponseCode(206)
+                .setHeader("Content-Range", "bytes $partial-7/8").setBody(content.substring(partial.toInt())))
+            val result = downloader.fetch(server.url("/media?signature=refreshed"), partial, 8, sink)
+            assertTrue(result.complete)
+            assertEquals(content, sink.readUtf8())
+            server.takeRequest()
+            assertEquals("bytes=$partial-7", server.takeRequest().getHeader("Range"))
+        }
+    }
 }

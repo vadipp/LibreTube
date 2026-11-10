@@ -483,8 +483,11 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         val localDownloadVersion = if (!isOffline && createNewSession) {
             runBlocking(Dispatchers.IO) {
                 val queued = DatabaseHolder.Database.downloadQueueDao().get(videoId)
-                if (queued != null && queued.state != "COMPLETE") null
-                else DatabaseHolder.Database.downloadDao().findById(videoId)
+                val saved = DatabaseHolder.Database.downloadDao().findById(videoId)
+                val expected = queued?.selection?.let {
+                    runCatching { JsonHelper.json.decodeFromString<List<com.github.libretube.api.obj.PipedStream>>(it) }.getOrNull()
+                }
+                if (expected != null && !DownloadQueuePolicy.complete(saved, expected)) null else saved
             }
         } else null
         if (DownloadQueuePolicy.complete(localDownloadVersion)) isOffline = true
@@ -747,7 +750,7 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
         binding.relPlayerDownload.setOnClickListener {
             if (!this::streams.isInitialized) return@setOnClickListener
 
-            DownloadHelper.startDownloadDialog(requireContext(), childFragmentManager, videoId)
+            DownloadHelper.startDownloadDialog(requireContext(), childFragmentManager, videoId, streams.title)
         }
 
         binding.downloadProgressButton.setOnClickListener {

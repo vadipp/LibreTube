@@ -131,8 +131,11 @@ class DownloadQueueWorker(context: Context, params: WorkerParameters) : Coroutin
 
     private suspend fun download(entry: QueuedDownload) {
         check(entry)
+        if (com.github.libretube.services.DownloadService.IS_DOWNLOAD_RUNNING) throw Waiting("RETRY")
         val previous = entry.selection?.let { JsonHelper.json.decodeFromString<List<PipedStream>>(it) }
-        val oldItems = Database.downloadDao().findById(entry.videoId)?.downloadItems.orEmpty()
+        val saved = Database.downloadDao().findById(entry.videoId)
+        val oldItems = saved?.downloadItems.orEmpty()
+        if (previous != null && DownloadQueuePolicy.complete(saved, previous)) return
         if (entry.state == "SPACE" && entry.totalBytes > 0 &&
             !DownloadQueuePolicy.fits(available(), (entry.totalBytes - oldItems.sumOf(::bytes)).coerceAtLeast(0))) throw Waiting("SPACE")
         dao.state(entry.videoId, "RESOLVING")

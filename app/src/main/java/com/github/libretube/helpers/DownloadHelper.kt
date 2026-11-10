@@ -69,13 +69,13 @@ object DownloadHelper {
         return Int.MAX_VALUE - id
     }
 
-    fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String) {
+    fun startDownloadDialog(context: Context, fragmentManager: FragmentManager, videoId: String, title: String? = null) {
         val externalProviderPackageName =
             PreferenceHelper.getString(PreferenceKeys.EXTERNAL_DOWNLOAD_PROVIDER, "")
 
         if (externalProviderPackageName.isBlank()) {
             DownloadDialog().apply {
-                arguments = bundleOf(IntentData.videoId to videoId)
+                arguments = bundleOf(IntentData.videoId to videoId, IntentData.videoTitle to title)
             }.show(fragmentManager, DownloadDialog::class.java.name)
         } else {
             val intent = Intent(Intent.ACTION_VIEW)
