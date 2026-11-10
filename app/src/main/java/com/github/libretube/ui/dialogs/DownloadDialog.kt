@@ -184,11 +184,12 @@ class DownloadDialog : DialogFragment() {
                     chosen, streams.duration, binding.subtitleSpinner.selectedItemPosition > 0
                 )
                 val remaining = if (available != null && estimate != null) available - estimate else null
-                val warning = remaining != null && remaining < DownloadSelection.LOW_SPACE_BYTES
+                val warning = available != null && (remaining ?: available) < DownloadSelection.LOW_SPACE_BYTES
                 val text = if (available == null) getString(R.string.download_storage_unavailable) else {
                     val free = Formatter.formatShortFileSize(context, available)
                     when {
-                        estimate == null -> getString(R.string.download_storage_unknown_size, free)
+                        estimate == null -> getString(R.string.download_storage_unknown_size, free) +
+                            if (warning) "\n" + getString(R.string.download_storage_low) else ""
                         remaining!! < 0 -> getString(R.string.download_storage_insufficient, free,
                             Formatter.formatShortFileSize(context, estimate))
                         else -> getString(R.string.download_storage_estimate, free,
@@ -199,7 +200,7 @@ class DownloadDialog : DialogFragment() {
                 }
                 binding.storageStatus.text = text
                 binding.storageStatus.setTextColor(MaterialColors.getColor(binding.storageStatus,
-                    if (warning) com.google.android.material.R.attr.colorError
+                    if (warning) androidx.appcompat.R.attr.colorError
                     else com.google.android.material.R.attr.colorOnSurfaceVariant))
                 binding.storageStatus.setTypeface(null, if (warning) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             }

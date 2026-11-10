@@ -9,6 +9,8 @@ import com.github.libretube.extensions.TAG
 import com.github.libretube.helpers.DownloadHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okio.BufferedSink
@@ -20,6 +22,14 @@ import kotlin.io.path.fileSize
  * Download from RAW HTTP stream.
  */
 class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
+    private val cancelled = AtomicBoolean(false)
+    @Volatile private var activeCall: Call? = null
+
+    override fun cancel() {
+        cancelled.set(true)
+        activeCall?.cancel()
+    }
+
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(AutheliaAuth.session)
@@ -39,7 +49,10 @@ class RawByteStreamDownloadProvider(val url: HttpUrl) : DownloadProvider {
     ): DownloadProgressResult {
         return withContext(Dispatchers.IO) {
             try {
-                val result = HttpDownloadChunk(httpClient).fetch(
+                val result = HttpDownloadChunk(httpClient, onCall = { call ->
+                    activeCall = call
+                    if (cancelled.get()) call.cancel()
+                }).fetch(
                     url, item.path.fileSize(), item.downloadSize, sink
                 )
                 result.totalSize?.let { item.downloadSize = it }

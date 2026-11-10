@@ -109,6 +109,7 @@ class DownloadService : LifecycleService() {
      */
     private val cancelledVideos = ConcurrentHashMap.newKeySet<String>()
     private val preparationJobs = ConcurrentHashMap<String, Job>()
+    private val activeProviders = mutableMapOf<Int, DownloadProvider>()
     private val itemJobs = mutableMapOf<Int, Job>()
 
     private val cachedStreamsInfo: MutableMap<String, Streams> = mutableMapOf()
@@ -320,6 +321,7 @@ class DownloadService : LifecycleService() {
         item: DownloadItem,
         downloadProvider: DownloadProvider,
     ) {
+        activeProviders[item.id] = downloadProvider
         downloadQueue[item.id] = true
         val notificationBuilder = getNotificationBuilder(item)
         setResumeNotification(notificationBuilder, item)
@@ -383,6 +385,7 @@ class DownloadService : LifecycleService() {
 
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { sink.close() }
+            activeProviders.remove(item.id)
         }
         if (item.videoId in cancelledVideos) return
 
@@ -466,6 +469,7 @@ class DownloadService : LifecycleService() {
             val download = Database.downloadDao().getDownloadById(videoId)
             for (item in download?.downloadItems.orEmpty()) {
                 downloadQueue.delete(item.id)
+                activeProviders[item.id]?.cancel()
                 itemJobs.remove(item.id)?.cancelAndJoin()
                 notificationManager.cancel(item.getNotificationId())
                 if (!item.isFinished) {
@@ -541,9 +545,7 @@ class DownloadService : LifecycleService() {
                     .take(slotsToFill)
 
                 candidates.forEach { item ->
-                    launch {
-                        selectFormatAndDownloadFile(item)
-                    }
+                    launchItem(item)
                 }
             }
         }
