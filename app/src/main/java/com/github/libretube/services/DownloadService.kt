@@ -165,6 +165,14 @@ class DownloadService : LifecycleService() {
         DownloadProgressTracker.preparing(videoId)
 
         lifecycleScope.launch(coroutineContext) {
+            val queued = Database.downloadQueueDao().get(videoId)
+            if (queued != null && queued.state !in setOf("COMPLETE", "CANCELLED")) {
+                DownloadProgressTracker.remove(videoId)
+                preparationJobs.remove(videoId)
+                stopServiceIfDone()
+                return@launch
+            }
+            Database.downloadQueueDao().forgetTerminal(videoId)
             val streams = loadStreamsInfo(videoId) ?: run {
                 DownloadProgressTracker.remove(videoId)
                 return@launch
@@ -503,6 +511,13 @@ class DownloadService : LifecycleService() {
 
         lifecycleScope.launch(coroutineContext) {
             val file = Database.downloadDao().findDownloadItemById(id) ?: return@launch
+            val queued = Database.downloadQueueDao().get(file.videoId)
+            if (queued != null && queued.state !in setOf("COMPLETE", "CANCELLED")) {
+                Database.downloadQueueDao().retry(file.videoId)
+                com.github.libretube.helpers.DownloadQueue.schedule(this@DownloadService, restart = true)
+                stopServiceIfDone()
+                return@launch
+            }
             launchItem(file)
         }
     }
@@ -525,10 +540,20 @@ class DownloadService : LifecycleService() {
      */
     private fun resumeAll() {
         lifecycleScope.launch(coroutineContext) {
+            val queued = Database.downloadQueueDao().all().filter { it.state !in setOf("COMPLETE", "CANCELLED") }
+            val queuedIds = queued.map { it.videoId }.toSet()
+            if (queued.isNotEmpty()) {
+                for (entry in queued) Database.downloadQueueDao().retry(entry.videoId)
+                com.github.libretube.helpers.DownloadQueue.schedule(this@DownloadService, restart = true)
+            }
             val incompleteItems = withContext(Dispatchers.IO) {
                 Database.downloadDao().getAll()
                     .flatMap { it.downloadItems }
-                    .filter { !it.isFinished }
+                    .filter { !it.isFinished && it.videoId !in queuedIds }
+            }
+            if (incompleteItems.isEmpty()) {
+                stopServiceIfDone()
+                return@launch
             }
 
             incompleteItems.forEach {

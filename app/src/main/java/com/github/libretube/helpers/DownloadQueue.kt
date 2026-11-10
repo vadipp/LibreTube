@@ -37,6 +37,7 @@ object DownloadQueue {
         "piped:" + RetrofitInstance.pipedAuthUrl + ":" + PreferenceHelper.getUsername() else "local"
 
     suspend fun enqueue(context: Context, videoId: String, title: String, width: Int, height: Int) {
+        if (DownloadProgressTracker.downloads.value.containsKey(videoId)) return
         Database.withTransaction {
             val existing = Database.downloadQueueDao().get(videoId)
             if (existing != null && DownloadQueuePolicy.active(existing.state)) return@withTransaction

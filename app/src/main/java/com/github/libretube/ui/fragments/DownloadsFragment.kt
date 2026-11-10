@@ -193,6 +193,7 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
     private lateinit var downloadTab: DownloadTab
     private var downloadPlaylistId: String? = null
 
+    private var queuedDownloadIds = emptySet<String>()
     private val activeDownloadIds = mutableSetOf<Int>()
 
     private var selectedSortType
@@ -280,6 +281,7 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
             viewLifecycleOwner.lifecycleScope.launch {
                 viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     Database.downloadQueueDao().observe().collect { entries ->
+                        queuedDownloadIds = entries.filter { it.state !in setOf("COMPLETE", "CANCELLED") }.map { it.videoId }.toSet()
                         binding.downloadQueueButton.text = getString(R.string.download_queue) +
                             " (" + entries.count { com.github.libretube.helpers.DownloadQueuePolicy.active(it.state) } + ")"
                         downloads = withContext(Dispatchers.IO) { Database.downloadDao().getAll() }.let { all ->
@@ -365,6 +367,10 @@ class DownloadsFragmentPage : DynamicLayoutManagerFragment(R.layout.fragment_dow
     }
 
     private fun toggleDownload(download: DownloadWithItems): Boolean {
+        if (download.download.videoId in queuedDownloadIds) {
+            com.github.libretube.ui.dialogs.DownloadQueueDialog().show(childFragmentManager, "download-queue")
+            return false
+        }
         val ids = download.downloadItems
             .filter { item -> item.path.fileSize() < item.downloadSize }
             .map { item -> item.id }

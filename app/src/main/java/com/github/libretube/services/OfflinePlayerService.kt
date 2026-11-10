@@ -47,6 +47,7 @@ open class OfflinePlayerService : AbstractPlayerService() {
     override val isOfflinePlayer: Boolean = true
     private var noInternetService: Boolean = false
 
+    private var offlineSelection: List<com.github.libretube.api.obj.PipedStream>? = null
     private var downloadWithItems: DownloadWithItems? = null
     private lateinit var playerData: PlayerData
 
@@ -114,6 +115,9 @@ open class OfflinePlayerService : AbstractPlayerService() {
         super.startPlayback()
 
         val downloadWithItems = withContext(Dispatchers.IO) {
+            offlineSelection = Database.downloadQueueDao().get(videoId)?.selection?.let {
+                runCatching { com.github.libretube.api.JsonHelper.json.decodeFromString<List<com.github.libretube.api.obj.PipedStream>>(it) }.getOrNull()
+            }
             Database.downloadDao().findById(videoId)
         } ?: return
         this.downloadWithItems = downloadWithItems
@@ -144,7 +148,11 @@ open class OfflinePlayerService : AbstractPlayerService() {
     }
 
     private fun setMediaItem(downloadWithItems: DownloadWithItems) {
-        val downloadFiles = downloadWithItems.downloadItems.filter { it.isFinished }
+        val downloadFiles = downloadWithItems.downloadItems.filter { item ->
+            item.isFinished && (item.type == FileType.SUBTITLE || offlineSelection == null || offlineSelection.orEmpty().any {
+                it.format == item.format && it.quality == item.quality && it.audioTrackLocale == item.language
+            })
+        }
 
         val videoUri = downloadFiles.firstOrNull { it.type == FileType.VIDEO }?.path?.toAndroidUri()
         val audioUri = downloadFiles.firstOrNull { it.type == FileType.AUDIO }?.path?.toAndroidUri()

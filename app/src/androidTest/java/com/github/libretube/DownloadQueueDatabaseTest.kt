@@ -48,6 +48,7 @@ class DownloadQueueDatabaseTest {
             assertNotNull(db.downloadDao().findById("ABCDEFGHIJK"))
         }
         context.deleteDatabase(name)
+        Unit
     }
 
     @Test fun cancellationWinsOverLateProgressAndResolution() = runBlocking {
@@ -67,5 +68,6 @@ class DownloadQueueDatabaseTest {
             assertEquals("CANCELLED", dao.get("ABCDEFGHIJK")?.state)
         }
         context.deleteDatabase(name)
+        Unit
     }
 }

@@ -37,6 +37,9 @@ interface DownloadQueueDao {
     @Query("UPDATE queuedDownload SET state = 'CANCELLED' WHERE videoId = :id AND state = 'CANCELLING'")
     suspend fun cancelled(id: String)
 
+    @Query("DELETE FROM queuedDownload WHERE videoId = :id AND state IN ('COMPLETE', 'CANCELLED')")
+    suspend fun forgetTerminal(id: String)
+
     @Query("UPDATE queuedDownload SET state = 'QUEUED' WHERE videoId = :id AND state IN ('SPACE', 'SIZE', 'RETRY', 'ATTENTION', 'INSTANCE')")
     suspend fun retry(id: String)
 }

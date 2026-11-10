@@ -480,17 +480,17 @@ class PlayerFragment : Fragment(R.layout.fragment_player), CustomPlayerCallback 
             }
         }
 
-        val localDownloadVersion = if (!isOffline && createNewSession) {
+        val localDownloadComplete = if (!isOffline && createNewSession) {
             runBlocking(Dispatchers.IO) {
                 val queued = DatabaseHolder.Database.downloadQueueDao().get(videoId)
                 val saved = DatabaseHolder.Database.downloadDao().findById(videoId)
                 val expected = queued?.selection?.let {
                     runCatching { JsonHelper.json.decodeFromString<List<com.github.libretube.api.obj.PipedStream>>(it) }.getOrNull()
                 }
-                if (expected != null && !DownloadQueuePolicy.complete(saved, expected)) null else saved
+                DownloadQueuePolicy.complete(saved, expected)
             }
-        } else null
-        if (DownloadQueuePolicy.complete(localDownloadVersion)) isOffline = true
+        } else false
+        if (localDownloadComplete) isOffline = true
         attachToPlayerService(playerData, createNewSession)
 
         val onBackPressedCallback = object : OnBackPressedCallback(true) {
