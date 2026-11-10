@@ -1,4 +1,4 @@
 *
 !Dockerfile
-!media.mjs
-!server.mjs
+!go.mod
+!*.go

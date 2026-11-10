@@ -1,6 +1,6 @@
-# Piped extractor adapter (prepared, not deployed)
+# Piped download extractor adapter
 
-A separate Node 22 service exposes a Piped-compatible `/downloads/streams/{videoId}`
+A separate Go service exposes a Piped-compatible `/downloads/streams/{videoId}`
 endpoint enriched with yt-dlp media formats. Normal `/streams/{videoId}` playback
 requests remain on the original backend and are rejected by the adapter.
 Existing Piped supplies video metadata and continues to own
@@ -39,27 +39,27 @@ avoid extraction. Container restarts discard the metadata cache.
 ## Validation
 
 ```sh
-npm test
+go test -race ./...
 ```
 
 Unit/HTTP tests cover index parsing, proxy-only URL rewriting, compatibility,
 fallback, cache expiry, same-ID request coalescing, concurrency limits, CORS,
 bounded responses and extractor timeout/process-group termination.
 
-`test/live.mjs` is an explicit live probe accepting video IDs as arguments. It
-uses deployment endpoints supplied through environment variables, starts the
-adapter on a temporary loopback port and checks the HTTP response, indexed HD
-formats, audio, repeatable mid-file byte ranges via the proxy and cache reuse.
-Its reports contain no signed URLs or credentials. Run it only in an isolated
-container with resource limits; it is not part of ordinary unit tests.
+The image includes an explicit live probe: run its executable with
+`verify VIDEO_ID` inside an isolated container with resource limits. It checks
+HD metadata, audio, proxy byte ranges and a cache hit, printing only dimensions
+and timings. It is not part of ordinary unit tests.
 
-## Packaging and proposed routing
+## Packaging and routing
 
-The Dockerfile pins a Node 22 Debian image by digest and yt-dlp 2026.10.26 by
-SHA-256. The standalone extractor is amd64-only. It executes the upstream yt-dlp
-EJS challenge component when needed (`ejs:github`), which may require network
-access and uses disposable `/tmp` cache. No Python or npm packages are installed
-on the host. Image assembly is separate from deploying it.
+The Dockerfile compiles the Go server and native health check, pins its base
+images, and installs yt-dlp 2026.10.26 with its pinned default dependencies,
+including the EJS challenge solver. Python modules are installed in the image;
+there is no self-extracting executable or RAM-backed Python installation.
+Node is retained only as the third-party JavaScript challenge runtime, with a
+bounded heap (96 MiB by default). No Python, Go or npm packages are installed
+on the host. Image assembly is separate from deployment.
 
 Build on a suitable build host:
 
@@ -68,8 +68,8 @@ docker build --platform linux/amd64 -t piped-extractor-adapter:prepared .
 ```
 
 `deploy/compose.example.yml` prepares an unpublished, non-root service with a
-read-only root, 384 MiB memory, zero swap, half a CPU and 64 PIDs. Its executable
-tmpfs is required by the bundled Python executable. Replace the example network
+read-only root, 384 MiB memory, zero swap, half a CPU and 64 PIDs. A 16 MiB
+non-executable tmpfs holds disposable cache files. Replace the example network
 and endpoint values before any deployment. Health checks establish process
 liveness, not successful extraction.
 
