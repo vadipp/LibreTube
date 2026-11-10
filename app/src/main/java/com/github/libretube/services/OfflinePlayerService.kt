@@ -88,7 +88,7 @@ open class OfflinePlayerService : AbstractPlayerService() {
                     Database.downloadDao()
                         .getDownloadPlaylistById(playerData.playlistId!!).downloadVideos.randomOrNull()
                 } else {
-                    Database.downloadDao().getAll().filterByTab(playerData.downloadTab!!)
+                    Database.downloadDao().getAll().filter { com.github.libretube.helpers.DownloadQueuePolicy.complete(it) }.filterByTab(playerData.downloadTab!!)
                         .randomOrNull()?.download
                 }
             }?.videoId
@@ -222,6 +222,7 @@ open class OfflinePlayerService : AbstractPlayerService() {
             var downloads = withContext(Dispatchers.IO) {
                 Database.downloadDao().getAll()
             }
+                .filter { com.github.libretube.helpers.DownloadQueuePolicy.complete(it) }
                 .filterByTab(playerData.downloadTab!!)
                 .map { it.download }
 

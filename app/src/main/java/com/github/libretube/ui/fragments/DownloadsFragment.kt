@@ -585,6 +585,9 @@ class PlaylistDownloadsFragmentPage : Fragment(R.layout.fragment_download_conten
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val binding = FragmentDownloadContentBinding.bind(view)
+        binding.downloadQueueButton.setOnClickListener {
+            com.github.libretube.ui.dialogs.DownloadQueueDialog().show(childFragmentManager, "download-queue")
+        }
         super.onViewCreated(view, savedInstanceState)
 
         binding.shuffleAll.isGone = true

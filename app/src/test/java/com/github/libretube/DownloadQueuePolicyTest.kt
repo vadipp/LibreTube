@@ -47,4 +47,16 @@ class DownloadQueuePolicyTest {
         Files.delete(video)
         Files.delete(dir)
     }
+    @Test fun missingExpectedAudioCannotBeMistakenForACompleteVideoOnlyDownload() {
+        val file = Files.createTempFile("expected-media", ".mp4")
+        Files.write(file, byteArrayOf(1, 2))
+        val item = DownloadItem(type = FileType.VIDEO, videoId = "example", fileName = "video",
+            path = file, format = "MPEG_4", quality = "720p", downloadSize = 2)
+        val saved = DownloadWithItems(Download("example"), listOf(item))
+        val video = PipedStream(format = "MPEG_4", quality = "720p")
+        val audio = PipedStream(format = "M4A", quality = "128 kbps")
+        assertTrue(Policy.complete(saved, listOf(video)))
+        assertFalse(Policy.complete(saved, listOf(video, audio)))
+        Files.delete(file)
+    }
 }
