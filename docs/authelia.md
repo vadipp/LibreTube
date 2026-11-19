@@ -110,5 +110,5 @@ trust configuration. TLS chain and hostname verification remain enabled.
 
 CI runs strict NewApi/InlinedApi lint, tests, assembly and signing, then installs
 and opens the APK twice on a GitHub-hosted API 25 x86 emulator before publishing.
-That startup check does not certify BYD media decoding, authentication, background
+That startup check does not certify target-device media decoding, authentication, background
 playback or offline downloads. Verify those on the target device.
